@@ -471,74 +471,99 @@ function toggleCard(key) {
   if (body) body.style.display = state.openCards[key] ? 'block' : 'none';
 }
 
-function exportData() {
-  const rows = [];
-  const header = ['管理コード','工程名','カテゴリとして使用','カテゴリ管理コード','カテゴリ名','表示順','アクティブ','件数取得'];
-  rows.push(header);
+function csvEsc(v) {
+  const s = String(v === null || v === undefined ? '' : v);
+  return (s.includes(',') || s.includes('"') || s.includes('\n')) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
 
-  let order = 1;
+function dlCSV(content, filename) {
+  const blob = new Blob(['\uFEFF' + content], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 1000);
+}
+
+const GRP_CODES = {
+  '社長室':'bb9985c5','役員活動':'YAKUIN_GRP','会社共通活動':'ALL_STAFF_TASK',
+  '営業部':'EIGYO_GRP','設計課':'V96UAY','工務課':'KOMU_TASK',
+  'IC課':'IC_GRP','マーケ課':'MARKETING_TASK','経理課':'KEIRI_TASK',
+  '人事課':'SAIYO_TASK','総務課':'SOMU_TASK','工事部':'KOJI_TASK',
+  '顧客満足向上':'CX_TASK','営業サポート課':'SUPPORT_TASK',
+  '情報システム課':'daa140f0','おうちづくり工程':'Q58WXJ',
+};
+
+function exportData() {
+  const today = new Date().toISOString().slice(0,10);
+
+  /* ===== 工程マスタ CSV =====
+     管理コード, 工程名, カテゴリとして使用, カテゴリ管理コード, カテゴリ名, 表示順, アクティブ, 件数取得 */
+  const mRows = [['管理コード','工程名','カテゴリとして使用','カテゴリ管理コード','カテゴリ名','表示順','アクティブ','件数取得']];
+  let mo = 1;
 
   BASE_DEPTS.forEach(dept => {
+    const grpCode = GRP_CODES[dept.name] || ('GRP_' + dept.name);
     if (dept.twoLayer) {
-      // おうちづくり工程: グループ行
-      const groupCode = 'IEDUKURI_NEW';
-      rows.push([groupCode, dept.name, 1, '', '', order++, 1, 0]);
+      mRows.push([grpCode, dept.name, 1, '', '', mo++, 1, 0]);
       dept.categories.forEach(catObj => {
-        const catCode = 'IECAT_' + catObj.cat.replace(/[^\w]/g,'');
-        rows.push([catCode, catObj.cat, 1, groupCode, dept.name, order++, 1, 0]);
-        catObj.items.forEach(item => {
-          rows.push(['', item, 0, catCode, catObj.cat, order++, 1, 0]);
-        });
+        const catCode = 'IECAT_' + catObj.cat;
+        mRows.push([catCode, catObj.cat, 1, grpCode, dept.name, mo++, 1, 0]);
+        catObj.items.forEach(item => mRows.push(['', item, 0, catCode, catObj.cat, mo++, 1, 0]));
       });
-      // 承認済み追加項目（おうちづくり配下）
       state.approved.filter(a => a.dept === dept.name).forEach(a => {
-        rows.push(['', a.name, 0, 'IECAT_other', a.dept, order++, 1, 0]);
+        const catCode = a.deptCat ? 'IECAT_' + a.deptCat : 'IECAT_全工程共通';
+        mRows.push(['', a.name, 0, catCode, a.deptCat || '全工程共通', mo++, 1, 0]);
       });
     } else {
-      // 通常部署: グループ行
-      const groupCode = 'GRP_' + dept.name.replace(/[^\w぀-ヿ一-鿿]/g,'');
-      rows.push([groupCode, dept.name, 1, '', '', order++, 1, 0]);
-      // ハイフンカテゴリ行
-      const dashCode = 'DASH_' + dept.name.replace(/[^\w぀-ヿ一-鿿]/g,'');
-      rows.push([dashCode, '-', 1, groupCode, dept.name, order++, 1, 0]);
-      dept.items.forEach(item => {
-        rows.push(['', item, 0, dashCode, '-', order++, 1, 0]);
+      const dashCode = 'DASH_' + dept.name;
+      mRows.push([grpCode, dept.name, 1, '', '', mo++, 1, 0]);
+      mRows.push([dashCode, '-', 1, grpCode, dept.name, mo++, 1, 0]);
+      dept.items.forEach(item => mRows.push(['', item, 0, dashCode, '-', mo++, 1, 0]));
+      state.approved.filter(a => a.dept === dept.name).forEach(a =>
+        mRows.push(['', a.name, 0, dashCode, '-', mo++, 1, 0])
+      );
+    }
+  });
+
+  dlCSV(mRows.map(r => r.map(csvEsc).join(',')).join('\n'), '工程マスタ_' + today + '.csv');
+
+  /* ===== 工程グループ CSV =====
+     管理コード, 工程グループ名, 表示順, 工程1コード, 工程1名, 工程2コード, 工程2名, 工程3コード, 工程3名
+     おうちづくり工程 → 工程1=部署, 工程2=業務
+     その他          → 工程1="-",  工程2=業務                                              */
+  const gRows = [['管理コード','工程グループ名','表示順','工程1コード','工程1名','工程2コード','工程2名','工程3コード','工程3名']];
+
+  BASE_DEPTS.forEach(dept => {
+    const grpCode = GRP_CODES[dept.name] || ('GRP_' + dept.name);
+    if (dept.twoLayer) {
+      dept.categories.forEach(catObj => {
+        const cat1Code = 'IECAT_' + catObj.cat;
+        catObj.items.forEach(item => {
+          gRows.push([grpCode, dept.name, 0, cat1Code, catObj.cat, '', item, '', '']);
+        });
       });
-      // 承認済み追加
       state.approved.filter(a => a.dept === dept.name).forEach(a => {
-        rows.push(['', a.name, 0, dashCode, '-', order++, 1, 0]);
+        const cat1Code = a.deptCat ? 'IECAT_' + a.deptCat : 'IECAT_全工程共通';
+        const cat1Name = a.deptCat || '全工程共通';
+        gRows.push([grpCode, dept.name, 0, cat1Code, cat1Name, '', a.name, '', '']);
+      });
+    } else {
+      const dashCode = 'DASH_' + dept.name;
+      dept.items.forEach(item => {
+        gRows.push([grpCode, dept.name, 0, dashCode, '-', '', item, '', '']);
+      });
+      state.approved.filter(a => a.dept === dept.name).forEach(a => {
+        gRows.push([grpCode, dept.name, 0, dashCode, '-', '', a.name, '', '']);
       });
     }
   });
 
-  const csvContent = rows.map(r =>
-    r.map(cell => {
-      const s = String(cell === null || cell === undefined ? '' : cell);
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s;
-    }).join(',')
-  ).join('\n');
-
-  document.getElementById('csv-content').value = csvContent;
-  const lineCount = csvContent.split('\n').length;
-  document.getElementById('csv-stats').textContent = lineCount + ' 行 / 承認済み追加: ' + state.approved.length + ' 件含む';
-  document.getElementById('csv-copy-btn').textContent = '全文コピー';
-  document.getElementById('csv-copy-btn').classList.remove('copied');
-  document.getElementById('csv-modal').classList.remove('hidden');
-  showToast('CSVを生成しました — コピーして保存してください');
-}
-
-function copyCSV() {
-  const ta = document.getElementById('csv-content');
-  ta.select();
-  try {
-    document.execCommand('copy');
-  } catch(e) {
-    navigator.clipboard.writeText(ta.value).catch(()=>{});
-  }
-  const btn = document.getElementById('csv-copy-btn');
-  btn.textContent = 'コピー済み ✓';
-  btn.classList.add('copied');
-  setTimeout(() => { btn.textContent = '全文コピー'; btn.classList.remove('copied'); }, 2500);
+  setTimeout(() => {
+    dlCSV(gRows.map(r => r.map(csvEsc).join(',')).join('\n'), '工程グループ_' + today + '.csv');
+    showToast('工程マスタ ＋ 工程グループ CSV をダウンロードしました');
+  }, 800);
 }
 
 function renderStats() {
