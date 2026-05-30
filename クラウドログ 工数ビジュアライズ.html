@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工程マスタ 共有エディタ</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#181c27;--border:#2a2f3d;
+  --text:#dde1ec;--muted:#7c8299;--hint:#4a5068;
+  --info-bg:#0d1f3c;--info:#60a5fa;--info-border:#1e3a5f;
+  --warn-bg:#1f1507;--warn:#fbbf24;--warn-border:#3d2a00;
+  --success-bg:#061a0e;--success:#4ade80;--success-border:#0f3320;
+  --danger-bg:#1a0707;--danger:#f87171;--danger-border:#3d1010;
+}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:0}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+.sidebar{background:var(--surface);border-right:0.5px solid var(--border);padding:0;display:flex;flex-direction:column}
+.main{padding:28px 32px;overflow-y:auto}
+
+/* Sidebar */
+.sidebar-logo{padding:22px 20px 16px;border-bottom:0.5px solid var(--border)}
+.logo-mark{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--hint);letter-spacing:0.05em;margin-bottom:4px}
+.logo-title{font-size:15px;font-weight:700;letter-spacing:-0.02em}
+.sync-badge{display:flex;align-items:center;gap:5px;font-size:10px;margin-top:6px;color:var(--success);background:var(--success-bg);border:0.5px solid var(--success-border);padding:3px 8px;border-radius:20px;width:fit-content}
+.sync-dot{width:5px;height:5px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+.sidebar-section{padding:12px 12px 8px;font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--hint);letter-spacing:0.06em;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:13px;cursor:pointer;color:var(--muted);border-left:2px solid transparent;transition:all .15s}
+.nav-item:hover{background:#1e2235;color:var(--text)}
+.nav-item.active{background:#1a1f35;color:#818cf8;border-left-color:#818cf8;font-weight:500}
+.nav-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.nav-count{margin-left:auto;font-size:10px;font-family:'IBM Plex Mono',monospace;background:var(--bg);padding:1px 6px;border-radius:10px}
+.nav-count.warn{background:var(--warn-bg);color:#b45309}
+.nav-count.info{background:var(--info-bg);color:var(--info)}
+
+.sidebar-footer{margin-top:auto;padding:16px;border-top:0.5px solid var(--border)}
+.role-label{font-size:10px;color:var(--hint);margin-bottom:6px;font-family:'IBM Plex Mono',monospace}
+.role-toggle{display:flex;border:0.5px solid var(--border);border-radius:6px;overflow:hidden}
+.role-btn{flex:1;font-size:11px;padding:6px 4px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-family:'Noto Sans JP',sans-serif;transition:all .15s;text-align:center}
+.role-btn.active{background:#818cf8;color:#0f1117}
+
+/* Main header */
+.page-header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px;padding-bottom:18px;border-bottom:1.5px solid #2a2f3d}
+.page-title{font-size:20px;font-weight:700;letter-spacing:-0.03em}
+.page-sub{font-size:11px;color:var(--hint);font-family:'IBM Plex Mono',monospace;margin-top:3px}
+.header-actions{display:flex;gap:8px}
+.btn{font-family:'Noto Sans JP',sans-serif;font-size:12px;padding:7px 14px;border-radius:6px;border:0.5px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .15s}
+.btn:hover{background:var(--bg)}
+.btn-primary{background:#818cf8;color:#0f1117;border-color:#818cf8}
+.btn-primary:hover{opacity:0.85}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+.stat-box{background:#1e2235;border:0.5px solid var(--border);border-radius:8px;padding:14px 16px}
+.stat-num{font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:-0.03em;line-height:1}
+.stat-num.c-info{color:var(--info)}
+.stat-num.c-warn{color:#d97706}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:5px}
+
+/* Add form panel */
+.add-panel{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;margin-bottom:20px;overflow:hidden}
+.add-panel.hidden{display:none}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:0.5px solid var(--border);cursor:pointer}
+.panel-head-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.panel-body{padding:18px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;color:var(--muted);font-weight:500}
+.field select,.field input[type=text]{width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:6px;font-size:13px;font-family:'Noto Sans JP',sans-serif;background:var(--surface);color:var(--text);outline:none;transition:border-color .15s}
+.field select:focus,.field input:focus{border-color:#818cf8}
+.form-actions{display:flex;gap:8px;margin-top:14px}
+.success-msg{font-size:12px;color:var(--success);padding:6px 10px;background:var(--success-bg);border:0.5px solid var(--success-border);border-radius:5px;margin-top:8px;display:none}
+
+/* Filter bar */
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.filter-lbl{font-size:11px;color:var(--hint);font-family:'IBM Plex Mono',monospace}
+.filter-chip{font-size:11px;padding:5px 12px;border-radius:20px;border:0.5px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s;font-family:'Noto Sans JP',sans-serif}
+.filter-chip:hover{border-color:var(--text);color:var(--text)}
+.filter-chip.on{background:#818cf8;color:#0f1117;border-color:#818cf8}
+
+/* Dept cards */
+.dept-card{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;transition:box-shadow .15s}
+.dept-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.05)}
+.dept-head{display:flex;align-items:center;gap:8px;padding:13px 18px;cursor:pointer;border-bottom:0.5px solid transparent;transition:background .1s}
+.dept-head:hover{background:#1e2235}
+.dept-card.open .dept-head{border-bottom-color:#2a2f3d}
+.dept-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap}
+.dept-name{font-size:13px;font-weight:700;flex:1;letter-spacing:-0.01em}
+.badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:500}
+.badge-pend{background:var(--warn-bg);color:#b45309;border:0.5px solid var(--warn-border)}
+.badge-new{background:var(--info-bg);color:var(--info);border:0.5px solid var(--info-border)}
+.dept-count{font-size:11px;color:var(--hint);font-family:'IBM Plex Mono',monospace;margin-left:auto;margin-right:6px}
+.caret{font-size:10px;color:var(--hint);transition:transform .2s}
+.dept-card.open .caret{transform:rotate(90deg)}
+
+.dept-body{display:none;padding:14px 18px 16px}
+.dept-card.open .dept-body{display:block}
+.items-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:5px}
+.item-chip{display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 9px;border-radius:5px;border:0.5px solid var(--border);background:#1e2235;color:var(--text)}
+.item-chip.is-new{border-color:var(--info-border);background:var(--info-bg);color:var(--info)}
+.item-chip.is-pend{border-color:var(--warn-border);background:var(--warn-bg);color:#92400e}
+.item-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.item-meta{margin-left:auto;display:flex;align-items:center;gap:4px}
+.tag-new{font-size:9px;padding:1px 5px;border-radius:3px;background:var(--info-bg);color:var(--info);font-weight:700;border:0.5px solid var(--info-border)}
+.tag-pend{font-size:9px;padding:1px 5px;border-radius:3px;background:var(--warn-bg);color:#b45309;font-weight:700;border:0.5px solid var(--warn-border)}
+.tag-time{font-size:10px;color:var(--hint);font-family:'IBM Plex Mono',monospace}
+.act-btn{font-size:10px;padding:3px 8px;border-radius:4px;border:0.5px solid;cursor:pointer;font-family:'Noto Sans JP',sans-serif;background:transparent;transition:all .15s}
+.act-approve{border-color:var(--success-border);color:var(--success)}
+.act-approve:hover{background:var(--success-bg)}
+.act-reject{border-color:var(--danger-border);color:var(--danger)}
+.act-reject:hover{background:var(--danger-bg)}
+
+.sub-section{margin-top:12px;padding-top:10px;border-top:0.5px solid var(--border)}
+.sub-label{font-size:11px;color:var(--muted);margin-bottom:7px;display:flex;align-items:center;gap:5px;font-weight:500}
+
+.empty-msg{font-size:13px;color:var(--hint);text-align:center;padding:40px 0}
+
+/* Notification toast */
+.toast{position:fixed;bottom:24px;right:24px;background:#818cf8;color:#0f1117;font-size:12px;padding:10px 16px;border-radius:8px;display:none;align-items:center;gap:8px;z-index:999;animation:toastIn .2s ease}
+.toast.show{display:flex}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Pending view */
+.pending-list{display:flex;flex-direction:column;gap:8px}
+.pending-card{background:var(--surface);border:0.5px solid var(--warn-border);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px}
+.pending-info{flex:1}
+.pending-name{font-size:14px;font-weight:700;margin-bottom:4px}
+.pending-meta{font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+.pending-memo{font-size:12px;color:var(--muted);margin-top:6px;font-style:italic}
+.pending-actions{display:flex;gap:6px;flex-shrink:0;padding-top:2px}
+
+@media(max-width:680px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .main{padding:16px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .form-grid{grid-template-columns:1fr}
+}
+
+/* Password modal */
+.pw-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center}
+.pw-overlay.hidden{display:none}
+.pw-card{background:var(--surface);border:0.5px solid var(--border);border-radius:12px;padding:36px 32px;width:300px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.12)}
+.pw-lock{font-size:28px;margin-bottom:10px}
+.pw-title{font-size:16px;font-weight:700;letter-spacing:-0.02em;margin-bottom:4px}
+.pw-sub{font-size:12px;color:var(--muted);margin-bottom:24px;line-height:1.6}
+.pw-dots{display:flex;justify-content:center;gap:10px;margin-bottom:20px}
+.pw-dot-ind{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--border);background:transparent;transition:all .15s}
+.pw-dot-ind.filled{background:var(--text);border-color:var(--text)}
+.pw-dot-ind.error{background:#dc2626;border-color:#dc2626;animation:shake .3s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.pw-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}
+.pw-key{padding:13px 0;font-size:17px;font-weight:500;font-family:'IBM Plex Mono',monospace;border:0.5px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;transition:all .1s;user-select:none}
+.pw-key:hover{background:var(--bg)}
+.pw-key:active{transform:scale(0.95);background:#2a2f3d}
+.pw-key.del{font-size:13px;color:var(--muted)}
+.pw-error{font-size:12px;color:#dc2626;margin-top:6px;min-height:16px}
+.pw-cancel{font-size:12px;color:var(--muted);margin-top:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;background:none;border:none;font-family:'Noto Sans JP',sans-serif}
+.pw-cancel:hover{color:var(--text)}
+
+/* CSV modal */
+.csv-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9998;display:flex;align-items:center;justify-content:center}
+.csv-overlay.hidden{display:none}
+.csv-card{background:#181c27;border:0.5px solid #2a2f3d;border-radius:12px;width:min(720px,95vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+.csv-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:0.5px solid #2a2f3d;flex-shrink:0}
+.csv-head-title{font-size:14px;font-weight:700;color:#dde1ec;display:flex;align-items:center;gap:8px}
+.csv-head-actions{display:flex;gap:8px;align-items:center}
+.csv-copy-btn{font-size:12px;padding:6px 14px;border-radius:6px;border:0.5px solid #818cf8;background:transparent;color:#818cf8;cursor:pointer;font-family:'Noto Sans JP',sans-serif;transition:all .15s}
+.csv-copy-btn:hover{background:#1a1f35}
+.csv-copy-btn.copied{background:#818cf8;color:#0f1117}
+.csv-close-btn{font-size:12px;padding:6px 12px;border-radius:6px;border:0.5px solid #2a2f3d;background:transparent;color:#7c8299;cursor:pointer;font-family:'Noto Sans JP',sans-serif;transition:all .15s}
+.csv-close-btn:hover{color:#dde1ec}
+.csv-hint{font-size:11px;color:#7c8299;padding:10px 20px;background:#0f1117;border-bottom:0.5px solid #2a2f3d;flex-shrink:0;line-height:1.6}
+.csv-hint strong{color:#fbbf24}
+.csv-body{overflow-y:auto;padding:14px 20px;flex:1}
+.csv-textarea{width:100%;min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:11px;background:#0f1117;color:#9fe1cb;border:0.5px solid #2a2f3d;border-radius:6px;padding:12px;resize:vertical;outline:none;line-height:1.7;white-space:pre}
+.csv-stats{font-size:11px;color:#4a5068;margin-top:8px;font-family:'IBM Plex Mono',monospace}
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">CLOUDLOG</div>
+      <div class="logo-title">工程マスタ</div>
+      <div class="sync-badge"><span class="sync-dot"></span>ローカル保存中</div>
+    </div>
+
+    <div class="sidebar-section">ナビゲーション</div>
+    <div class="nav-item active" onclick="showView('list')">
+      <span class="nav-dot" style="background:#4f46e5"></span>
+      工程一覧
+      <span class="nav-count" id="nav-total">—</span>
+    </div>
+    <div class="nav-item" onclick="showView('pending')">
+      <span class="nav-dot" style="background:#d97706"></span>
+      承認待ち
+      <span class="nav-count warn" id="nav-pending">0</span>
+    </div>
+    <div class="nav-item" onclick="showView('approved')">
+      <span class="nav-dot" style="background:#1d4ed8"></span>
+      承認済み追加
+      <span class="nav-count info" id="nav-approved">0</span>
+    </div>
+
+    <div class="sidebar-section">部署で絞り込み</div>
+    <div class="nav-item" id="nav-all" onclick="setTagFilter('all')">すべての部署</div>
+    <div class="nav-item" id="nav-keiei" onclick="setTagFilter('経営')"><span class="nav-dot" style="background:#7c3aed"></span>経営</div>
+    <div class="nav-item" id="nav-zensha" onclick="setTagFilter('全社')"><span class="nav-dot" style="background:#0284c7"></span>全社</div>
+    <div class="nav-item" id="nav-eigyo" onclick="setTagFilter('営業')"><span class="nav-dot" style="background:#ea580c"></span>営業</div>
+    <div class="nav-item" id="nav-kokyaku" onclick="setTagFilter('顧客対応')"><span class="nav-dot" style="background:#16a34a"></span>顧客対応</div>
+    <div class="nav-item" id="nav-sekou" onclick="setTagFilter('施工')"><span class="nav-dot" style="background:#dc2626"></span>施工</div>
+    <div class="nav-item" id="nav-marke" onclick="setTagFilter('マーケ')"><span class="nav-dot" style="background:#be185d"></span>マーケ</div>
+    <div class="nav-item" id="nav-kanri" onclick="setTagFilter('管理')"><span class="nav-dot" style="background:#4f46e5"></span>管理</div>
+
+    <div class="sidebar-footer">
+      <div class="role-label">操作モード</div>
+      <div class="role-toggle">
+        <button class="role-btn active" id="rbtn-shacho" onclick="setRole('shacho')">申請（追加）</button>
+        <button class="role-btn" id="rbtn-manager" onclick="setRole('manager')">確認者</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <div class="page-title" id="pageTitle">工程一覧</div>
+        <div class="page-sub" id="pageSub">2026-05-30 エクスポート / 再設定プロジェクト</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn" onclick="exportData()">&#8595; CSVエクスポート</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-num" id="s-base">—</div><div class="stat-lbl">既存工程</div></div>
+      <div class="stat-box"><div class="stat-num c-info" id="s-approved">0</div><div class="stat-lbl">承認済み追加</div></div>
+      <div class="stat-box"><div class="stat-num c-warn" id="s-pending">0</div><div class="stat-lbl">承認待ち</div></div>
+      <div class="stat-box"><div class="stat-num" id="s-total">—</div><div class="stat-lbl">合計工程数</div></div>
+    </div>
+
+    <!-- Add form -->
+    <div class="add-panel" id="addPanel">
+      <div class="panel-head" onclick="togglePanel()">
+        <div class="panel-head-title">&#43; 新しい工程を追加申請</div>
+        <span id="panelCaret" style="font-size:12px;color:#9c9a90">▼</span>
+      </div>
+      <div class="panel-body" id="panelBody">
+        <div class="form-grid">
+          <div class="field">
+            <label>部署・カテゴリ <span style="color:#dc2626">*</span></label>
+            <select id="inp-dept"></select>
+          </div>
+          <div class="field">
+            <label>工程名 <span style="color:#dc2626">*</span></label>
+            <input type="text" id="inp-name" placeholder="例：設計レビュー会議">
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label>追加理由・メモ（任意）</label>
+            <input type="text" id="inp-memo" placeholder="追加の背景や目的を記入">
+          </div>
+          <div class="field">
+            <label>追加者名</label>
+            <input type="text" id="inp-author" placeholder="例：社長">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="submitItem()">&#10003; 追加申請する</button>
+          <button class="btn" onclick="clearForm()">クリア</button>
+        </div>
+        <div class="success-msg" id="addMsg"></div>
+      </div>
+    </div>
+
+    <!-- Filter bar (list view) -->
+    <div id="filterBar" class="filter-bar">
+      <span class="filter-lbl">絞り込み:</span>
+      <button class="filter-chip on" onclick="setStatusFilter('all',this)">すべて</button>
+      <button class="filter-chip" onclick="setStatusFilter('has-pending',this)">承認待ちあり</button>
+      <button class="filter-chip" onclick="setStatusFilter('has-approved',this)">追加済みあり</button>
+    </div>
+
+    <!-- List view -->
+    <div id="viewList"></div>
+
+    <!-- Pending view -->
+    <div id="viewPending" style="display:none"></div>
+
+    <!-- Approved view -->
+    <div id="viewApproved" style="display:none"></div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE_DEPTS = [
+  {tag:'経営',name:'社長室',color:'#7c3aed',tagBg:'#f0eaff',tagColor:'#6d28d9',items:['着工前現場調査','社長室業務','取締役会']},
+  {tag:'経営',name:'役員活動',color:'#7c3aed',tagBg:'#f0eaff',tagColor:'#6d28d9',items:['役員MT','社員面談','事業計画関連']},
+  {tag:'全社',name:'会社共通活動',color:'#0284c7',tagBg:'#e0f2fe',tagColor:'#0369a1',items:['移動（出張）','採用活動','積込み/荷卸し','移動','休憩','労務管理','朝礼/清掃/開店準備','社内行事関連','仕組みづくり','レクチャー（講師側）','レクチャー（受ける側）','全社会議/業者会議','社外業者打ち合わせ','社内ミーティング']},
+  {tag:'営業',name:'営業部',color:'#ea580c',tagBg:'#fff7ed',tagColor:'#c2410c',items:['追客（P前）','探客活動','顧客商談（P前）','商談準備（P前）','設え/見学会準備/清掃','案件ミーティング','ロープレ']},
+  {tag:'顧客対応',name:'設計課',color:'#16a34a',tagBg:'#dcfce7',tagColor:'#166534',items:['図面作成（P前）','現調/役調（P前）']},
+  {tag:'施工',name:'工務課',color:'#dc2626',tagBg:'#fee2e2',tagColor:'#991b1b',items:['庶務業務','発注業務','全体案件進捗シート確認','業者電話対応','ANDPAD確認','請求書チェック','工務ミーティング','工程会議（準備含む）','工務その他']},
+  {tag:'顧客対応',name:'IC課',color:'#16a34a',tagBg:'#dcfce7',tagColor:'#166534',items:['IC業務(その他)','アフター現場対応','小工事現場対応','アフター会議（準備含む）','アフターその他']},
+  {tag:'マーケ',name:'マーケ課',color:'#be185d',tagBg:'#fce7f3',tagColor:'#9d174d',items:['リサーチ','集計作業','制作物確認/作成','予算管理','イベント企画','レポート作成/分析','打合せ（社内/業者）','現場活動']},
+  {tag:'管理',name:'経理課',color:'#4f46e5',tagBg:'#ede9fe',tagColor:'#4338ca',items:['予実管理','財務業務','金融機関等対応','資金繰り業務','経理業務','入金業務','支払業務','最終清算業務']},
+  {tag:'管理',name:'人事課',color:'#4f46e5',tagBg:'#ede9fe',tagColor:'#4338ca',items:['面談/面接まとめ','その他事務作業','部署関連打合せ（採用・教育・評価）','面接・面談・説明会']},
+  {tag:'管理',name:'総務課',color:'#4f46e5',tagBg:'#ede9fe',tagColor:'#4338ca',items:['庶務業務','入退社処理業務','給与集計/計算業務','契約書作成/締結業務','総務業務']},
+  {tag:'施工',name:'工事部',color:'#dc2626',tagBg:'#fee2e2',tagColor:'#991b1b',items:['材料加工','外構図作成','中間・完成検査','各種申請書類作成','事務所内業（見積関係）','車両整備/社内整備','現場作業','社内作業']},
+  {tag:'営業',name:'営業サポート課',color:'#ea580c',tagBg:'#fff7ed',tagColor:'#c2410c',items:['引渡し準備業務','申込み後の顧客業務','店舗業務']},
+  {tag:'管理',name:'情報システム課',color:'#4f46e5',tagBg:'#ede9fe',tagColor:'#4338ca',items:['システムメンテナンス','システム開発']},
+  {tag:'顧客対応',name:'おうちづくり工程',color:'#16a34a',tagBg:'#dcfce7',tagColor:'#166534',
+   twoLayer:true,
+   categories:[
+     {cat:'営業',items:['追客（P前）','顧客商談（P前）','商談準備（P前）','案件ミーティング','営業業務']},
+     {cat:'設計',items:['設計業務','図面作成（P前）','現調/役調（P前）']},
+     {cat:'工務',items:['工務｜アフター関連','工務｜現場イレギュラー対応','工務｜リペア関連','工務｜現場訪問(移動含み)','工務｜仮設計画(計画・現場環境手配)','工務｜工程表作成(業者調整含む)','工務｜実行予算(図面把握・予算登録)','工務業務（社内活動）','工務業務（社内打合せ）','工務業務（現場活動）','工務業務（現場打合せ）']},
+     {cat:'IC',items:['IC業務(準備)','IC業務（作図）','IC業務（打合せ）','IC業務(顧客打合せ)']},
+     {cat:'CX',items:['CX業務（単独活動）','CX業務（顧客対応）','CX業務（社外対応）','CS活動（おもてなし）']},
+     {cat:'全工程共通',items:['四者会議','顧客関連ミーティング（４者/3者会議）','その他']},
+   ],
+   items:[]},
+];
+
+const STORAGE_KEY = 'kousu_master_v1';
+let state = { pending: [], approved: [], openCards: {} };
+let role = 'shacho';
+let currentView = 'list';
+let tagFilter = 'all';
+let statusFilter = 'all';
+let panelOpen = true;
+
+function loadState() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (s) state = JSON.parse(s);
+  } catch(e) {}
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function applyRole(r) {
+  role = r;
+  document.getElementById('rbtn-shacho').classList.toggle('active', r==='shacho');
+  document.getElementById('rbtn-manager').classList.toggle('active', r==='manager');
+  const p = document.getElementById('addPanel');
+  p.classList.toggle('hidden', r==='manager');
+  renderAll();
+}
+
+function showView(v) {
+  currentView = v;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const map = {list:'nav-total',pending:'nav-pending',approved:'nav-approved'};
+  document.getElementById('viewList').style.display = v==='list' ? 'block' : 'none';
+  document.getElementById('viewPending').style.display = v==='pending' ? 'block' : 'none';
+  document.getElementById('viewApproved').style.display = v==='approved' ? 'block' : 'none';
+  document.getElementById('filterBar').style.display = v==='list' ? 'flex' : 'none';
+  const titles = {list:'工程一覧',pending:'承認待ち一覧',approved:'承認済み追加項目'};
+  document.getElementById('pageTitle').textContent = titles[v];
+  const navIds = {list:['nav-all','nav-keiei','nav-zensha','nav-eigyo','nav-kokyaku','nav-sekou','nav-marke','nav-kanri'],pending:[],approved:[]};
+  renderAll();
+}
+
+function setTagFilter(t) {
+  tagFilter = t;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const idMap = {all:'nav-all','経営':'nav-keiei','全社':'nav-zensha','営業':'nav-eigyo','顧客対応':'nav-kokyaku','施工':'nav-sekou','マーケ':'nav-marke','管理':'nav-kanri'};
+  if (idMap[t]) document.getElementById(idMap[t]).classList.add('active');
+  currentView = 'list';
+  document.getElementById('viewList').style.display = 'block';
+  document.getElementById('viewPending').style.display = 'none';
+  document.getElementById('viewApproved').style.display = 'none';
+  document.getElementById('filterBar').style.display = 'flex';
+  document.getElementById('pageTitle').textContent = t === 'all' ? '工程一覧' : t + ' — 工程一覧';
+  renderAll();
+}
+
+function setStatusFilter(f, btn) {
+  statusFilter = f;
+  document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderAll();
+}
+
+function togglePanel() {
+  panelOpen = !panelOpen;
+  document.getElementById('panelBody').style.display = panelOpen ? 'block' : 'none';
+  document.getElementById('panelCaret').textContent = panelOpen ? '▲' : '▼';
+}
+
+function clearForm() {
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-memo').value = '';
+  document.getElementById('inp-author').value = '';
+  document.getElementById('addMsg').style.display = 'none';
+}
+
+function submitItem() {
+  const deptRaw = document.getElementById('inp-dept').value;
+  const deptParts = deptRaw.split('|');
+  const dept = deptParts[0];
+  const deptCat = deptParts[1] || null;
+  const name = document.getElementById('inp-name').value.trim();
+  const memo = document.getElementById('inp-memo').value.trim();
+  const author = document.getElementById('inp-author').value.trim() || '社長';
+  if (!name) { alert('工程名を入力してください'); return; }
+  const item = {
+    id: Date.now(),
+    dept, deptCat, name, memo, author,
+    addedAt: new Date().toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
+  };
+  state.pending.push(item);
+  saveState();
+  const msg = document.getElementById('addMsg');
+  msg.textContent = '「' + name + '」を追加申請しました。確認者の承認をお待ちください。';
+  msg.style.display = 'block';
+  setTimeout(() => msg.style.display = 'none', 4000);
+  clearForm();
+  showToast('追加申請しました');
+  renderAll();
+}
+
+function approveItem(id) {
+  const idx = state.pending.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const item = state.pending.splice(idx, 1)[0];
+  state.approved.push(item);
+  saveState();
+  showToast('「' + item.name + '」を承認しました');
+  renderAll();
+}
+
+function rejectItem(id) {
+  const idx = state.pending.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  const name = state.pending[idx].name;
+  state.pending.splice(idx, 1);
+  saveState();
+  showToast('「' + name + '」を却下しました');
+  renderAll();
+}
+
+function toggleCard(key) {
+  state.openCards[key] = !state.openCards[key];
+  const el = document.getElementById('dc-' + key);
+  if (el) el.classList.toggle('open', state.openCards[key]);
+  const body = el ? el.querySelector('.dept-body') : null;
+  if (body) body.style.display = state.openCards[key] ? 'block' : 'none';
+}
+
+function exportData() {
+  const rows = [];
+  const header = ['管理コード','工程名','カテゴリとして使用','カテゴリ管理コード','カテゴリ名','表示順','アクティブ','件数取得'];
+  rows.push(header);
+
+  let order = 1;
+
+  BASE_DEPTS.forEach(dept => {
+    if (dept.twoLayer) {
+      // おうちづくり工程: グループ行
+      const groupCode = 'IEDUKURI_NEW';
+      rows.push([groupCode, dept.name, 1, '', '', order++, 1, 0]);
+      dept.categories.forEach(catObj => {
+        const catCode = 'IECAT_' + catObj.cat.replace(/[^\w]/g,'');
+        rows.push([catCode, catObj.cat, 1, groupCode, dept.name, order++, 1, 0]);
+        catObj.items.forEach(item => {
+          rows.push(['', item, 0, catCode, catObj.cat, order++, 1, 0]);
+        });
+      });
+      // 承認済み追加項目（おうちづくり配下）
+      state.approved.filter(a => a.dept === dept.name).forEach(a => {
+        rows.push(['', a.name, 0, 'IECAT_other', a.dept, order++, 1, 0]);
+      });
+    } else {
+      // 通常部署: グループ行
+      const groupCode = 'GRP_' + dept.name.replace(/[^\w぀-ヿ一-鿿]/g,'');
+      rows.push([groupCode, dept.name, 1, '', '', order++, 1, 0]);
+      // ハイフンカテゴリ行
+      const dashCode = 'DASH_' + dept.name.replace(/[^\w぀-ヿ一-鿿]/g,'');
+      rows.push([dashCode, '-', 1, groupCode, dept.name, order++, 1, 0]);
+      dept.items.forEach(item => {
+        rows.push(['', item, 0, dashCode, '-', order++, 1, 0]);
+      });
+      // 承認済み追加
+      state.approved.filter(a => a.dept === dept.name).forEach(a => {
+        rows.push(['', a.name, 0, dashCode, '-', order++, 1, 0]);
+      });
+    }
+  });
+
+  const csvContent = rows.map(r =>
+    r.map(cell => {
+      const s = String(cell === null || cell === undefined ? '' : cell);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',')
+  ).join('\n');
+
+  document.getElementById('csv-content').value = csvContent;
+  const lineCount = csvContent.split('\n').length;
+  document.getElementById('csv-stats').textContent = lineCount + ' 行 / 承認済み追加: ' + state.approved.length + ' 件含む';
+  document.getElementById('csv-copy-btn').textContent = '全文コピー';
+  document.getElementById('csv-copy-btn').classList.remove('copied');
+  document.getElementById('csv-modal').classList.remove('hidden');
+  showToast('CSVを生成しました — コピーして保存してください');
+}
+
+function copyCSV() {
+  const ta = document.getElementById('csv-content');
+  ta.select();
+  try {
+    document.execCommand('copy');
+  } catch(e) {
+    navigator.clipboard.writeText(ta.value).catch(()=>{});
+  }
+  const btn = document.getElementById('csv-copy-btn');
+  btn.textContent = 'コピー済み ✓';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = '全文コピー'; btn.classList.remove('copied'); }, 2500);
+}
+
+function renderStats() {
+  const base = BASE_DEPTS.reduce((s,d)=>s+d.items.length,0);
+  const ap = state.approved.length;
+  const pe = state.pending.length;
+  document.getElementById('s-base').textContent = base;
+  document.getElementById('s-approved').textContent = ap;
+  document.getElementById('s-pending').textContent = pe;
+  document.getElementById('s-total').textContent = base + ap;
+  document.getElementById('nav-total').textContent = base + ap;
+  document.getElementById('nav-pending').textContent = pe;
+  document.getElementById('nav-approved').textContent = ap;
+}
+
+function renderList() {
+  let depts = BASE_DEPTS.filter(d => tagFilter === 'all' || d.tag === tagFilter);
+  if (statusFilter === 'has-pending') depts = depts.filter(d => state.pending.some(p => p.dept === d.name));
+  if (statusFilter === 'has-approved') depts = depts.filter(d => state.approved.some(a => a.dept === d.name));
+
+  if (depts.length === 0) {
+    document.getElementById('viewList').innerHTML = '<div class="empty-msg">該当する部署がありません</div>';
+    return;
+  }
+
+  document.getElementById('viewList').innerHTML = depts.map(dept => {
+    const key = dept.name.replace(/[^\w\u3040-\u30FF\u4E00-\u9FFF]/g, '_');
+    const isOpen = !!state.openCards[key];
+    const dPend = state.pending.filter(p => p.dept === dept.name);
+    const dAppr = state.approved.filter(a => a.dept === dept.name);
+    const total = dept.items.length + dAppr.length;
+    return `
+    <div class="dept-card${isOpen?' open':''}" id="dc-${key}">
+      <div class="dept-head" onclick="toggleCard('${key}')">
+        <span class="dept-tag" style="background:${dept.tagBg};color:${dept.tagColor}">${dept.tag}</span>
+        <span class="dept-name">${dept.name}</span>
+        ${dPend.length>0?`<span class="badge badge-pend">承認待ち ${dPend.length}</span>`:''}
+        ${dAppr.length>0?`<span class="badge badge-new">追加 ${dAppr.length}</span>`:''}
+        <span class="dept-count">${total}件</span>
+        <span class="caret">&#9656;</span>
+      </div>
+      <div class="dept-body" style="display:${isOpen?'block':'none'}">
+        ${dept.twoLayer ? `
+          ${dept.categories.map(catObj => `
+            <div class="sub-section" style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">
+              <div class="sub-label" style="color:#60a5fa;margin-bottom:6px">
+                <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#0d1f3c;color:#60a5fa;border:0.5px solid #1e3a5f;font-weight:700">${catObj.cat}</span>
+              </div>
+              <div class="items-grid">
+                ${catObj.items.map(n=>`
+                  <div class="item-chip">
+                    <span class="item-dot" style="background:${dept.color}"></span>
+                    <span>${n}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        ` : `
+        <div class="items-grid">
+          ${dept.items.map(n=>`
+            <div class="item-chip">
+              <span class="item-dot" style="background:${dept.color}"></span>
+              <span>${n}</span>
+            </div>
+          `).join('')}
+        </div>
+        `}
+        ${dAppr.length>0?`
+          <div class="sub-section">
+            <div class="sub-label" style="color:#60a5fa">&#10003; 承認済み追加項目</div>
+            <div class="items-grid">
+              ${dAppr.map(item=>`
+                <div class="item-chip is-new">
+                  <span class="item-dot" style="background:${dept.color}"></span>
+                  <span>${item.name}</span>
+                  <div class="item-meta">
+                    <span class="tag-new">NEW</span>
+                    <span class="tag-time">${item.addedAt}</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>`:''}
+        ${dPend.length>0?`
+          <div class="sub-section">
+            <div class="sub-label" style="color:#fbbf24">&#9679; 承認待ち</div>
+            <div class="items-grid">
+              ${dPend.map(item=>`
+                <div class="item-chip is-pend">
+                  <span class="item-dot" style="background:#d97706"></span>
+                  <span>${item.name}</span>
+                  <div class="item-meta">
+                    <span class="tag-pend">申請中</span>
+                    ${role==='manager'?`
+                      <button class="act-btn act-approve" onclick="approveItem(${item.id})">&#10003; 承認</button>
+                      <button class="act-btn act-reject" onclick="rejectItem(${item.id})">&#215;</button>
+                    `:''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPending() {
+  const el = document.getElementById('viewPending');
+  if (state.pending.length === 0) {
+    el.innerHTML = '<div class="empty-msg">&#10003; 承認待ちの項目はありません</div>';
+    return;
+  }
+  el.innerHTML = `<div class="pending-list">${state.pending.map(item => {
+    const dept = BASE_DEPTS.find(d=>d.name===item.dept);
+    const tagBg = dept ? dept.tagBg : '#f5f5f5';
+    const tagCol = dept ? dept.tagColor : '#555';
+    const tag = dept ? dept.tag : '—';
+    return `
+    <div class="pending-card">
+      <div style="padding-top:2px">
+        <span class="dept-tag" style="background:${tagBg};color:${tagCol}">${tag}</span>
+      </div>
+      <div class="pending-info">
+        <div class="pending-name">${item.name}</div>
+        <div class="pending-meta">
+          <span>部署: ${item.dept}</span>
+          <span>申請者: ${item.author}</span>
+          <span>日時: ${item.addedAt}</span>
+        </div>
+        ${item.memo?`<div class="pending-memo">${item.memo}</div>`:''}
+      </div>
+      ${role==='manager'?`
+        <div class="pending-actions">
+          <button class="act-btn act-approve" onclick="approveItem(${item.id})">&#10003; 承認</button>
+          <button class="act-btn act-reject" onclick="rejectItem(${item.id})">却下</button>
+        </div>`:''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function renderApproved() {
+  const el = document.getElementById('viewApproved');
+  if (state.approved.length === 0) {
+    el.innerHTML = '<div class="empty-msg">承認済みの追加項目はまだありません</div>';
+    return;
+  }
+  el.innerHTML = `<div class="pending-list">${state.approved.map(item => {
+    const dept = BASE_DEPTS.find(d=>d.name===item.dept);
+    const tagBg = dept ? dept.tagBg : '#f5f5f5';
+    const tagCol = dept ? dept.tagColor : '#555';
+    const tag = dept ? dept.tag : '—';
+    return `
+    <div class="pending-card" style="border-color:#1e3a5f">
+      <div style="padding-top:2px">
+        <span class="dept-tag" style="background:${tagBg};color:${tagCol}">${tag}</span>
+      </div>
+      <div class="pending-info">
+        <div class="pending-name">${item.name}</div>
+        <div class="pending-meta">
+          <span>部署: ${item.dept}</span>
+          <span>申請者: ${item.author}</span>
+          <span>承認日時: ${item.addedAt}</span>
+        </div>
+        ${item.memo?`<div class="pending-memo">${item.memo}</div>`:''}
+      </div>
+      <span class="badge badge-new" style="flex-shrink:0;height:fit-content">承認済み</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function renderAll() {
+  renderStats();
+  renderList();
+  renderPending();
+  renderApproved();
+}
+
+
+const PW_CORRECT = '0000';
+let pwBuffer = '';
+
+function setRole(r) {
+  if (r === 'manager') {
+    openPwModal();
+    return;
+  }
+  applyRole('shacho');
+}
+
+function openPwModal() {
+  pwBuffer = '';
+  updateDots();
+  document.getElementById('pw-err').textContent = '';
+  document.getElementById('pw-modal').classList.remove('hidden');
+}
+
+function closePwModal() {
+  document.getElementById('pw-modal').classList.add('hidden');
+  pwBuffer = '';
+  updateDots();
+}
+
+function pwInput(n) {
+  if (pwBuffer.length >= 4) return;
+  pwBuffer += n;
+  updateDots();
+  if (pwBuffer.length === 4) {
+    setTimeout(() => {
+      if (pwBuffer === PW_CORRECT) {
+        document.getElementById('pw-modal').classList.add('hidden');
+        applyRole('manager');
+      } else {
+        document.querySelectorAll('.pw-dot-ind').forEach(d => {
+          d.classList.add('error');
+          setTimeout(() => { d.classList.remove('error','filled'); }, 500);
+        });
+        document.getElementById('pw-err').textContent = 'パスワードが違います';
+        pwBuffer = '';
+        setTimeout(() => document.getElementById('pw-err').textContent = '', 1800);
+      }
+    }, 120);
+  }
+}
+function pwDelete() {
+  pwBuffer = pwBuffer.slice(0, -1);
+  updateDots();
+}
+function updateDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('d' + i).classList.toggle('filled', i < pwBuffer.length);
+  }
+}
+
+// Init
+loadState();
+const deptSel = document.getElementById('inp-dept');
+BASE_DEPTS.forEach(d => {
+  if (d.twoLayer) {
+    d.categories.forEach(catObj => {
+      const o = document.createElement('option');
+      o.value = d.name + '|' + catObj.cat;
+      o.textContent = '[おうちづくり] ' + catObj.cat;
+      deptSel.appendChild(o);
+    });
+  } else {
+    const o = document.createElement('option');
+    o.value = d.name;
+    o.textContent = '[' + d.tag + '] ' + d.name;
+    deptSel.appendChild(o);
+  }
+});
+document.getElementById('nav-all').classList.add('active');
+renderAll();
+</script>
+
+<div class="pw-overlay hidden" id="pw-modal">
+  <div class="pw-card">
+    <div class="pw-lock">&#128274;</div>
+    <div class="pw-title">承認者モード</div>
+    <div class="pw-sub">承認操作にはパスワードが必要です</div>
+    <div class="pw-dots">
+      <div class="pw-dot-ind" id="d0"></div>
+      <div class="pw-dot-ind" id="d1"></div>
+      <div class="pw-dot-ind" id="d2"></div>
+      <div class="pw-dot-ind" id="d3"></div>
+    </div>
+    <div class="pw-numpad">
+      <button class="pw-key" onclick="pwInput('1')">1</button>
+      <button class="pw-key" onclick="pwInput('2')">2</button>
+      <button class="pw-key" onclick="pwInput('3')">3</button>
+      <button class="pw-key" onclick="pwInput('4')">4</button>
+      <button class="pw-key" onclick="pwInput('5')">5</button>
+      <button class="pw-key" onclick="pwInput('6')">6</button>
+      <button class="pw-key" onclick="pwInput('7')">7</button>
+      <button class="pw-key" onclick="pwInput('8')">8</button>
+      <button class="pw-key" onclick="pwInput('9')">9</button>
+      <button class="pw-key del" onclick="pwDelete()">&#9003;</button>
+      <button class="pw-key" onclick="pwInput('0')">0</button>
+      <div></div>
+    </div>
+    <div class="pw-error" id="pw-err"></div>
+    <button class="pw-cancel" onclick="closePwModal()">キャンセル</button>
+  </div>
+</div>
+
+
+<div class="csv-overlay hidden" id="csv-modal">
+  <div class="csv-card">
+    <div class="csv-head">
+      <div class="csv-head-title">&#8595; CSVエクスポート</div>
+      <div class="csv-head-actions">
+        <button class="csv-copy-btn" id="csv-copy-btn" onclick="copyCSV()">全文コピー</button>
+        <button class="csv-close-btn" onclick="document.getElementById('csv-modal').classList.add('hidden')">閉じる</button>
+      </div>
+    </div>
+    <div class="csv-hint">
+      <strong>使い方：</strong>「全文コピー」→ テキストエディタ（メモ帳など）に貼り付け → <strong>.csv</strong> で保存 → クラウドログにインポート
+    </div>
+    <div class="csv-body">
+      <textarea class="csv-textarea" id="csv-content" readonly></textarea>
+      <div class="csv-stats" id="csv-stats"></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
