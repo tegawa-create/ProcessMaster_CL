@@ -385,17 +385,17 @@ const BASE_DEPTS = [
   {tag:'顧客対応',name:'おうちづくり工程',color:'#16a34a',tagBg:'#dcfce7',tagColor:'#166534',
    twoLayer:true,
    categories:[
-     {cat:'営業',items:['追客（P前）','顧客商談（P前）','商談準備（P前）','案件ミーティング','営業業務']},
-     {cat:'設計課',items:['設計業務','図面作成（P前）','現調/役調（P前）']},
-     {cat:'工務',items:['工務｜アフター関連','工務｜現場イレギュラー対応','工務｜リペア関連','工務｜現場訪問(移動含み)','工務｜仮設計画(計画・現場環境手配)','工務｜工程表作成(業者調整含む)','工務｜実行予算(図面把握・予算登録)','工務業務（社内活動）','工務業務（社内打合せ）','工務業務（現場活動）','工務業務（現場打合せ）']},
-     {cat:'IC課',items:['IC業務(準備)','IC業務（作図）','IC業務（打合せ）','IC業務(顧客打合せ)']},
-     {cat:'CX課',items:['CX業務（単独活動）','CX業務（顧客対応）','CX業務（社外対応）','CS活動（おもてなし）']},
+     {cat:'営業',items:['追客（P前）','顧客商談（P前）','商談準備（P前）','案件ミーティング','営業業務','顧客関連ミーティング（４者/3者会議）','その他']},
+     {cat:'工務',items:['移動（案件）','現場進捗管理（工程表チェック・修正・調整含む）','実行予算（図面把握・予算登録）','工程表作成（業者調整：電話・Chat含む）','現場訪問（安全・品質（検査）・工程等）','着工前工務業務','着工中業務（イレギュラー・近隣クレーム等含む）','完工後業務（リペア手配・現場引渡段取り等）','引渡後対応（アフター・クレーム等）','追加発注・実行予算修正','業者打合せ（来社・対面）','その他']},
+     {cat:'CX課',items:['立会（契約）','立会（土地）','立会（融資）','立会（セレモニー）','事務（契約）','事務（融資）','事務（登記）','事務（精算・引渡）','事務（申請）','お客様サポート','アフターフォロー','移動（お客様）','移動（店舗応援）','その他']},
+     {cat:'設計課',items:['設計業務','図面作成（P前）','現調/役調（P前）','顧客関連ミーティング（４者/3者会議）','その他']},
+     {cat:'IC課',items:['移動（お客様）','移動（現場・業者）','お客様打合せ（BH）','お客様打合せ（PG）','お客様打合せ（EXH）','お客様対応（お家ノート等）','イベント同席','現場打合せ','現場・施工対応','図面作成・作図','資料作成（図面以外）','社内打合せ（案件）','チームMT（コーデ）','その他']},
    ],
    items:[]},
 ];
 
 const STORAGE_KEY = 'kousu_master_v1'; // fallback only
-const DEFAULT_HIDDEN = ["63ef9e11_old", "SR_CAT06_old", "b3da32e1_old", "8bcc747f_old", "SR_CAT08_old", "adef96be_old", "SR_CAT03_old", "SR_CAT02_old", "7b0a6489_old", "d5a0aca6_old", "e6ecae32_old", "d9c2c873_old", "dfa4a688_old", "SR_CAT05_old", "6ee0310b_old", "fae3778b_old", "SR_CAT07_old", "bc4c1703_old", "185b6e9d_old", "SR_CAT09_old", "SR_CAT04_old", "SR_CAT01_old"];
+const DEFAULT_HIDDEN = ["6ee0310b_old", "b3da32e1_old", "IE_ETC_KM", "dfa4a688_old", "SR_CAT01_old", "SR_CAT06_old", "fae3778b_old", "SR_CAT09_old", "e6ecae32_old", "SR_CAT03_old", "SR_CAT08_old", "IE_MTG_IC", "7b0a6489_old", "SR_CAT07_old", "adef96be_old", "bc4c1703_old", "IE_MTG_CX", "IE_ETC_CX", "SR_CAT02_old", "SR_CAT05_old", "d5a0aca6_old", "IE_MTG_KM", "8bcc747f_old", "IE_ETC_IC", "d9c2c873_old", "63ef9e11_old", "SR_CAT04_old", "185b6e9d_old"];
 let state = { pending: [], approved: [], openCards: {}, edits: {}, deleted: {} };
 let role = 'shacho';
 let currentView = 'list';
@@ -698,10 +698,10 @@ const GRP_CODES = {
 // おうちづくり工程のカテゴリ定義（部署別分類）
 const IE_CATS = [
   {cat:'営業',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['d38337d3','KQYX9O','id_00012','id_00015','a0ccd579','IE_MTG_EG','IE_ETC_EG']},
-  {cat:'工務',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['KM_01','KM_02','KM_03','KM_04','KM_05','KM_06','KM_07','KM_08','KM_09','KM_10','KM_11','KM_12','IE_MTG_KM','IE_ETC_KM']},
-  {cat:'CX課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['CX_01','CX_02','CX_03','CX_04','CX_05','CX_06','CX_07','CX_08','CX_09','CX_10','CX_11','CX_12','CX_13','CX_14','IE_MTG_CX','IE_ETC_CX']},
+  {cat:'工務',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['KM_01','KM_02','KM_03','KM_04','KM_05','KM_06','KM_07','KM_08','KM_09','KM_10','KM_11','KM_12']},
+  {cat:'CX課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['CX_01','CX_02','CX_03','CX_04','CX_05','CX_06','CX_07','CX_08','CX_09','CX_10','CX_11','CX_12','CX_13','CX_14']},
   {cat:'設計課', catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['f4b91acf','619a7196','f2435755','IE_MTG_SK','IE_ETC_SK']},
-  {cat:'IC課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['IC_01','IC_02','IC_03','IC_04','IC_05','IC_06','IC_07','IC_08','IC_09','IC_10','IC_11','IC_12','IC_13','IC_14','IE_MTG_IC','IE_ETC_IC']},
+  {cat:'IC課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['IC_01','IC_02','IC_03','IC_04','IC_05','IC_06','IC_07','IC_08','IC_09','IC_10','IC_11','IC_12','IC_13','IC_14']},
 ];
 
 function getIECat(code) {
@@ -727,8 +727,8 @@ function exportMaster() {
   });
 
   // SEKKEI_WK・IC_WK: 工程グループの工程1コードとして使用するため非カテゴリ行で追加
-  rows.push(['SEKKEI_WK', '設計課', 0, '', '', ord++, 1, 0]);
-  rows.push(['IC_WK',     'IC課',   0, '', '', ord++, 1, 0]);
+  rows.push(['SEKKEI_WK', '設計課', 0, '', '', 998, 1, 0]);
+  rows.push(['IC_WK',     'IC課',   0, '', '', 999, 1, 0]);
 
   // 承認済み追加分を末尾に追記
   state.approved.forEach(a => {
