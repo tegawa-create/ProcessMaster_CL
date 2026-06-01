@@ -4,6 +4,53 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>工程マスタ 共有エディタ</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDobU2uEuv4Fe0aIAJpslNdZsxxwDr244E",
+    authDomain: "kousu-master.firebaseapp.com",
+    databaseURL: "https://kousu-master-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "kousu-master",
+    storageBucket: "kousu-master.firebasestorage.app",
+    messagingSenderId: "1051775687724",
+    appId: "1:1051775687724:web:e5698f5cc2c821c86ac589"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const STATE_REF = ref(db, 'kousu/state');
+
+  // Firebase経由でstateを保存
+  window.fbSave = async function(state) {
+    try {
+      const payload = {
+        pending: state.pending || [],
+        approved: state.approved || [],
+        edits: state.edits || {},
+        deleted: state.deleted || {},
+      };
+      await set(STATE_REF, payload);
+    } catch(e) { console.error('Firebase save error:', e); }
+  };
+
+  // Firebase経由でstateを読み込み（初回）
+  window.fbLoad = async function() {
+    try {
+      const snap = await get(STATE_REF);
+      if (snap.exists()) return snap.val();
+    } catch(e) { console.error('Firebase load error:', e); }
+    return null;
+  };
+
+  // リアルタイム監視（他ユーザーの変更を受信）
+  window.fbWatch = function(callback) {
+    onValue(STATE_REF, (snap) => {
+      if (snap.exists()) callback(snap.val());
+    });
+  };
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -181,6 +228,17 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .csv-body{overflow-y:auto;padding:14px 20px;flex:1}
 .csv-textarea{width:100%;min-height:320px;font-family:'IBM Plex Mono',monospace;font-size:11px;background:#0f1117;color:#9fe1cb;border:0.5px solid #2a2f3d;border-radius:6px;padding:12px;resize:vertical;outline:none;line-height:1.7;white-space:pre}
 .csv-stats{font-size:11px;color:#4a5068;margin-top:8px;font-family:'IBM Plex Mono',monospace}
+
+.chip-code{font-size:9px;color:var(--color-text-tertiary,#4a5068);font-family:'IBM Plex Mono',monospace;margin-left:auto;flex-shrink:0;opacity:0.7}
+.edited-chip{border-color:#818cf8!important;background:#1a1f35!important}
+.edited-mark{font-size:9px;padding:1px 4px;border-radius:3px;background:#818cf8;color:#0f1117;font-weight:700;flex-shrink:0}
+.item-chip[ondblclick]{cursor:text}
+.item-chip.is-inactive{opacity:0.38;text-decoration:line-through;color:var(--color-text-tertiary,#4a5068);background:#161a26}
+.inactive-tag{font-size:9px;padding:1px 5px;border-radius:3px;background:#2a2f3d;color:#4a5068;font-weight:500;flex-shrink:0;white-space:nowrap}
+
+.chip-del{display:none;font-size:10px;padding:1px 5px;border-radius:3px;border:0.5px solid var(--danger-border);color:var(--danger);background:transparent;cursor:pointer;flex-shrink:0;margin-left:2px;font-family:'Noto Sans JP',sans-serif;line-height:1.4}
+body.is-manager .item-chip:hover .chip-del{display:inline-flex}
+body.is-manager .item-chip.is-new .chip-del{display:inline-flex}
 </style>
 </head>
 <body>
@@ -225,7 +283,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
       <div class="role-label">操作モード</div>
       <div class="role-toggle">
         <button class="role-btn active" id="rbtn-shacho" onclick="setRole('shacho')">申請（追加）</button>
-        <button class="role-btn" id="rbtn-manager" onclick="setRole('manager')">確認者</button>
+        <button class="role-btn" id="rbtn-manager" onclick="setRole('manager')">承認者</button>
       </div>
     </div>
   </aside>
@@ -238,7 +296,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
         <div class="page-sub" id="pageSub">2026-05-30 エクスポート / 再設定プロジェクト</div>
       </div>
       <div class="header-actions">
-        <button class="btn" onclick="exportData()">&#8595; CSVエクスポート</button>
+        <button class="btn" onclick="exportMaster()">&#8595; 工程マスタ CSV</button>
+        <button class="btn btn-primary" onclick="exportGroup()">&#8595; 工程グループ CSV</button>
       </div>
     </div>
 
@@ -274,7 +333,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
           </div>
           <div class="field">
             <label>追加者名</label>
-            <input type="text" id="inp-author" placeholder="例：社長">
+            <input type="text" id="inp-author" placeholder="例：山田">
           </div>
         </div>
         <div class="form-actions">
@@ -326,32 +385,48 @@ const BASE_DEPTS = [
    twoLayer:true,
    categories:[
      {cat:'営業',items:['追客（P前）','顧客商談（P前）','商談準備（P前）','案件ミーティング','営業業務']},
-     {cat:'設計',items:['設計業務','図面作成（P前）','現調/役調（P前）']},
+     {cat:'設計課',items:['設計業務','図面作成（P前）','現調/役調（P前）']},
      {cat:'工務',items:['工務｜アフター関連','工務｜現場イレギュラー対応','工務｜リペア関連','工務｜現場訪問(移動含み)','工務｜仮設計画(計画・現場環境手配)','工務｜工程表作成(業者調整含む)','工務｜実行予算(図面把握・予算登録)','工務業務（社内活動）','工務業務（社内打合せ）','工務業務（現場活動）','工務業務（現場打合せ）']},
-     {cat:'IC',items:['IC業務(準備)','IC業務（作図）','IC業務（打合せ）','IC業務(顧客打合せ)']},
-     {cat:'CX',items:['CX業務（単独活動）','CX業務（顧客対応）','CX業務（社外対応）','CS活動（おもてなし）']},
-     {cat:'全工程共通',items:['四者会議','顧客関連ミーティング（４者/3者会議）','その他']},
+     {cat:'IC課',items:['IC業務(準備)','IC業務（作図）','IC業務（打合せ）','IC業務(顧客打合せ)']},
+     {cat:'CX課',items:['CX業務（単独活動）','CX業務（顧客対応）','CX業務（社外対応）','CS活動（おもてなし）']},
    ],
    items:[]},
 ];
 
-const STORAGE_KEY = 'kousu_master_v1';
-let state = { pending: [], approved: [], openCards: {} };
+const STORAGE_KEY = 'kousu_master_v1'; // fallback only
+const DEFAULT_HIDDEN = ['b3da32e1_old', '7b0a6489_old', 'd5a0aca6_old', 'adef96be_old', 'fae3778b_old', 'bc4c1703_old', 'e6ecae32_old', 'd9c2c873_old', '8bcc747f_old', '63ef9e11_old'];
+let state = { pending: [], approved: [], openCards: {}, edits: {}, deleted: {} };
 let role = 'shacho';
 let currentView = 'list';
 let tagFilter = 'all';
 let statusFilter = 'all';
 let panelOpen = true;
 
-function loadState() {
-  try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    if (s) state = JSON.parse(s);
-  } catch(e) {}
+async function loadState() {
+  // Firebase優先、フォールバックはlocalStorage
+  let loaded = null;
+  if (window.fbLoad) {
+    loaded = await window.fbLoad();
+  }
+  if (loaded) {
+    state.pending  = loaded.pending  || [];
+    state.approved = loaded.approved || [];
+    state.edits    = loaded.edits    || {};
+    state.deleted  = loaded.deleted  || {};
+  } else {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY);
+      if (s) { const p = JSON.parse(s); Object.assign(state, p); }
+    } catch(e) {}
+  }
+  // 旧コード(_old)は常に非表示
+  if (!state.deleted) state.deleted = {};
+  DEFAULT_HIDDEN.forEach(code => { state.deleted[code] = true; });
 }
 
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  if (window.fbSave) window.fbSave(state);
 }
 
 function showToast(msg) {
@@ -367,6 +442,7 @@ function applyRole(r) {
   document.getElementById('rbtn-manager').classList.toggle('active', r==='manager');
   const p = document.getElementById('addPanel');
   p.classList.toggle('hidden', r==='manager');
+  document.body.classList.toggle('is-manager', r==='manager');
   renderAll();
 }
 
@@ -425,7 +501,7 @@ function submitItem() {
   const deptCat = deptParts[1] || null;
   const name = document.getElementById('inp-name').value.trim();
   const memo = document.getElementById('inp-memo').value.trim();
-  const author = document.getElementById('inp-author').value.trim() || '社長';
+  const author = document.getElementById('inp-author').value.trim() || '無記名';
   if (!name) { alert('工程名を入力してください'); return; }
   const item = {
     id: Date.now(),
@@ -435,7 +511,7 @@ function submitItem() {
   state.pending.push(item);
   saveState();
   const msg = document.getElementById('addMsg');
-  msg.textContent = '「' + name + '」を追加申請しました。確認者の承認をお待ちください。';
+  msg.textContent = '「' + name + '」を追加申請しました。承認者の承認をお待ちください。';
   msg.style.display = 'block';
   setTimeout(() => msg.style.display = 'none', 4000);
   clearForm();
@@ -483,88 +559,238 @@ function dlCSV(content, filename) {
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 1000);
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 1500);
 }
 
+const ORIGINAL_MASTER = [
+{"code": "KOMU_N01", "name": "課行事（業者部会・業者会・安全パトロール等）", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 260, "active": 1, "count": 0},
+{"code": "KOMU_N02", "name": "課内仕組みづくり", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 261, "active": 1, "count": 0},
+{"code": "KOMU_N03", "name": "課内レクチャー（講師側・受ける側）", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 262, "active": 1, "count": 0},
+{"code": "KOMU_N04", "name": "課内MT・技術部MT", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 263, "active": 1, "count": 0},
+{"code": "KOMU_N05", "name": "業者打合せ（来社・対面／案件外）", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 264, "active": 1, "count": 0},
+{"code": "KOMU_N06", "name": "その他（工務課）", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 265, "active": 1, "count": 0},
+{"code": "ALL_N01", "name": "エラー・トラブル報告会議", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 270, "active": 1, "count": 0},
+{"code": "KM_01", "name": "移動（案件）", "catUse": 0, "catCode": "", "catName": "", "order": 240, "active": 1, "count": 0},
+{"code": "KM_02", "name": "現場進捗管理（工程表チェック・修正・調整含む）", "catUse": 0, "catCode": "", "catName": "", "order": 241, "active": 1, "count": 0},
+{"code": "KM_03", "name": "実行予算（図面把握・予算登録）", "catUse": 0, "catCode": "", "catName": "", "order": 242, "active": 1, "count": 0},
+{"code": "KM_04", "name": "工程表作成（業者調整：電話・Chat含む）", "catUse": 0, "catCode": "", "catName": "", "order": 243, "active": 1, "count": 0},
+{"code": "KM_05", "name": "現場訪問（安全・品質（検査）・工程等）", "catUse": 0, "catCode": "", "catName": "", "order": 244, "active": 1, "count": 0},
+{"code": "KM_06", "name": "着工前工務業務", "catUse": 0, "catCode": "", "catName": "", "order": 245, "active": 1, "count": 0},
+{"code": "KM_07", "name": "着工中業務（イレギュラー・近隣クレーム等含む）", "catUse": 0, "catCode": "", "catName": "", "order": 246, "active": 1, "count": 0},
+{"code": "KM_08", "name": "完工後業務（リペア手配・現場引渡段取り等）", "catUse": 0, "catCode": "", "catName": "", "order": 247, "active": 1, "count": 0},
+{"code": "KM_09", "name": "引渡後対応（アフター・クレーム等）", "catUse": 0, "catCode": "", "catName": "", "order": 248, "active": 1, "count": 0},
+{"code": "KM_10", "name": "追加発注・実行予算修正", "catUse": 0, "catCode": "", "catName": "", "order": 249, "active": 1, "count": 0},
+{"code": "KM_11", "name": "業者打合せ（来社・対面）", "catUse": 0, "catCode": "", "catName": "", "order": 250, "active": 1, "count": 0},
+{"code": "KM_12", "name": "その他", "catUse": 0, "catCode": "", "catName": "", "order": 251, "active": 1, "count": 0},
+{"code": "CX_01", "name": "立会（契約）", "catUse": 0, "catCode": "", "catName": "", "order": 200, "active": 1, "count": 0},
+{"code": "CX_02", "name": "立会（土地）", "catUse": 0, "catCode": "", "catName": "", "order": 201, "active": 1, "count": 0},
+{"code": "CX_03", "name": "立会（融資）", "catUse": 0, "catCode": "", "catName": "", "order": 202, "active": 1, "count": 0},
+{"code": "CX_04", "name": "立会（セレモニー）", "catUse": 0, "catCode": "", "catName": "", "order": 203, "active": 1, "count": 0},
+{"code": "CX_05", "name": "事務（契約）", "catUse": 0, "catCode": "", "catName": "", "order": 204, "active": 1, "count": 0},
+{"code": "CX_06", "name": "事務（融資）", "catUse": 0, "catCode": "", "catName": "", "order": 205, "active": 1, "count": 0},
+{"code": "CX_07", "name": "事務（登記）", "catUse": 0, "catCode": "", "catName": "", "order": 206, "active": 1, "count": 0},
+{"code": "CX_08", "name": "事務（精算・引渡）", "catUse": 0, "catCode": "", "catName": "", "order": 207, "active": 1, "count": 0},
+{"code": "CX_09", "name": "事務（申請）", "catUse": 0, "catCode": "", "catName": "", "order": 208, "active": 1, "count": 0},
+{"code": "CX_10", "name": "お客様サポート", "catUse": 0, "catCode": "", "catName": "", "order": 209, "active": 1, "count": 0},
+{"code": "CX_11", "name": "アフターフォロー", "catUse": 0, "catCode": "", "catName": "", "order": 210, "active": 1, "count": 0},
+{"code": "CX_12", "name": "移動（お客様）", "catUse": 0, "catCode": "", "catName": "", "order": 211, "active": 1, "count": 0},
+{"code": "CX_13", "name": "移動（店舗応援）", "catUse": 0, "catCode": "", "catName": "", "order": 212, "active": 1, "count": 0},
+{"code": "CX_14", "name": "その他", "catUse": 0, "catCode": "", "catName": "", "order": 213, "active": 1, "count": 0},
+{"code": "IC_01", "name": "移動（お客様）", "catUse": 0, "catCode": "", "catName": "", "order": 220, "active": 1, "count": 0},
+{"code": "IC_02", "name": "移動（現場・業者）", "catUse": 0, "catCode": "", "catName": "", "order": 221, "active": 1, "count": 0},
+{"code": "IC_03", "name": "お客様打合せ（BH）", "catUse": 0, "catCode": "", "catName": "", "order": 222, "active": 1, "count": 0},
+{"code": "IC_04", "name": "お客様打合せ（PG）", "catUse": 0, "catCode": "", "catName": "", "order": 223, "active": 1, "count": 0},
+{"code": "IC_05", "name": "お客様打合せ（EXH）", "catUse": 0, "catCode": "", "catName": "", "order": 224, "active": 1, "count": 0},
+{"code": "IC_06", "name": "お客様対応（お家ノート等）", "catUse": 0, "catCode": "", "catName": "", "order": 225, "active": 1, "count": 0},
+{"code": "IC_07", "name": "イベント同席", "catUse": 0, "catCode": "", "catName": "", "order": 226, "active": 1, "count": 0},
+{"code": "IC_08", "name": "現場打合せ", "catUse": 0, "catCode": "", "catName": "", "order": 227, "active": 1, "count": 0},
+{"code": "IC_09", "name": "現場・施工対応", "catUse": 0, "catCode": "", "catName": "", "order": 228, "active": 1, "count": 0},
+{"code": "IC_10", "name": "図面作成・作図", "catUse": 0, "catCode": "", "catName": "", "order": 229, "active": 1, "count": 0},
+{"code": "IC_11", "name": "資料作成（図面以外）", "catUse": 0, "catCode": "", "catName": "", "order": 230, "active": 1, "count": 0},
+{"code": "IC_12", "name": "社内打合せ（案件）", "catUse": 0, "catCode": "", "catName": "", "order": 231, "active": 1, "count": 0},
+{"code": "IC_13", "name": "チームMT（コーデ）", "catUse": 0, "catCode": "", "catName": "", "order": 232, "active": 1, "count": 0},
+{"code": "IC_14", "name": "その他", "catUse": 0, "catCode": "", "catName": "", "order": 233, "active": 1, "count": 0},{"code": "7PCAOY", "name": "-", "catUse": 0, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "FWGEIR", "name": "工務課", "catUse": 0, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "JUSDS2", "name": "営業", "catUse": 0, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "LEN2PZ", "name": "CX課", "catUse": 0, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "0dbd00f5", "name": "【部門活動】IC課", "catUse": 1, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "1afb753d", "name": "IC業務(その他)", "catUse": 0, "catCode": "0dbd00f5", "catName": "【部門活動】IC課", "order": 0, "active": 1, "count": 0}, {"code": "KOKYAKUKOJI_TASK", "name": "【顧客工事部活動】全工程", "catUse": 1, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "433e29d6", "name": "基礎工事", "catUse": 0, "catCode": "KOKYAKUKOJI_TASK", "catName": "【顧客工事部活動】全工程", "order": 0, "active": 1, "count": 0}, {"code": "e99d19d7", "name": "外構工事", "catUse": 0, "catCode": "KOKYAKUKOJI_TASK", "catName": "【顧客工事部活動】全工程", "order": 0, "active": 1, "count": 0}, {"code": "a59a633d", "name": "STO工事", "catUse": 0, "catCode": "KOKYAKUKOJI_TASK", "catName": "【顧客工事部活動】全工程", "order": 0, "active": 1, "count": 0}, {"code": "55cca066", "name": "その他工事作業", "catUse": 0, "catCode": "KOKYAKUKOJI_TASK", "catName": "【顧客工事部活動】全工程", "order": 0, "active": 1, "count": 0}, {"code": "aaaa", "name": "役員活動", "catUse": 1, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "d21104f2", "name": "事業計画関連", "catUse": 0, "catCode": "aaaa", "catName": "役員活動", "order": 0, "active": 1, "count": 0}, {"code": "72017513", "name": "社員面談", "catUse": 0, "catCode": "aaaa", "catName": "役員活動", "order": 0, "active": 1, "count": 0}, {"code": "96f6d312", "name": "役員MT", "catUse": 0, "catCode": "aaaa", "catName": "役員活動", "order": 0, "active": 1, "count": 0}, {"code": "65636124", "name": "取締役会", "catUse": 0, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "dfa4a688", "name": "【部門活動】社長室業務", "catUse": 1, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "185b6e9d", "name": "社長室業務", "catUse": 0, "catCode": "dfa4a688", "catName": "【部門活動】社長室業務", "order": 0, "active": 1, "count": 0}, {"code": "6ee0310b", "name": "着工前現場調査", "catUse": 0, "catCode": "dfa4a688", "catName": "【部門活動】社長室業務", "order": 0, "active": 1, "count": 0}, {"code": "370843f7", "name": "【部門活動】企画開発部", "catUse": 0, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "8951a4bb", "name": "【部門活動】企画開発部", "catUse": 1, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "8e4cd786", "name": "【部門活動】大工部", "catUse": 1, "catCode": "", "catName": "", "order": 0, "active": 1, "count": 0}, {"code": "NV9QH7", "name": "【会社活動】", "catUse": 1, "catCode": "", "catName": "", "order": 1, "active": 1, "count": 0}, {"code": "d45b3afa", "name": "積込み/荷卸し", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 0, "active": 1, "count": 0}, {"code": "d00b21ad", "name": "採用活動", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 0, "active": 1, "count": 0}, {"code": "bc039a98", "name": "移動（出張）", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 0, "active": 1, "count": 0}, {"code": "87f31472", "name": "移動（出張）", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 0, "active": 1, "count": 0}, {"code": "２３２", "name": "社内会議", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 10, "active": 0, "count": 0}, {"code": "9GSS6N", "name": "エラー改善活動", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 10, "active": 0, "count": 0}, {"code": "E6YD9X", "name": "レクチャー", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 10, "active": 0, "count": 0}, {"code": "１１２", "name": "資料作成", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 99, "active": 0, "count": 0}, {"code": "BMONIW", "name": "移動", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 100, "active": 1, "count": 0}, {"code": "NXG6H7", "name": "休憩", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 101, "active": 1, "count": 0}, {"code": "GMPS93", "name": "労務管理", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 102, "active": 1, "count": 0}, {"code": "WW1JU9", "name": "朝礼/清掃/開店準備", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 103, "active": 1, "count": 0}, {"code": "9JZF7O", "name": "社内行事関連", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 104, "active": 1, "count": 0}, {"code": "L48K9K", "name": "仕組みづくり", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 105, "active": 1, "count": 0}, {"code": "id_00001", "name": "レクチャー（講師側）", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 106, "active": 1, "count": 0}, {"code": "id_00002", "name": "レクチャー（受ける側）", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 107, "active": 1, "count": 0}, {"code": "id_00009", "name": "全社会議/業者会議", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 108, "active": 1, "count": 0}, {"code": "id_00010", "name": "社外業者打ち合わせ", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 109, "active": 1, "count": 0}, {"code": "451398b6", "name": "社内ミーティング", "catUse": 0, "catCode": "NV9QH7", "catName": "【会社活動】", "order": 110, "active": 1, "count": 0}, {"code": "QDR3R2", "name": "【部門活動】営業部", "catUse": 1, "catCode": "", "catName": "", "order": 2, "active": 1, "count": 0}, {"code": "d38337d3", "name": "追客（P前）", "catUse": 0, "catCode": "QDR3R2", "catName": "【部門活動】営業部", "order": 0, "active": 1, "count": 0}, {"code": "N617KR", "name": "探客活動", "catUse": 0, "catCode": "QDR3R2", "catName": "【部門活動】営業部", "order": 111, "active": 1, "count": 0}, {"code": "KQYX9O", "name": "顧客商談（P前）", "catUse": 0, "catCode": "QDR3R2", "catName": "【部門活動】営業部", "order": 112, "active": 1, "count": 0}, {"code": "id_00012", "name": "商談準備（P前）", "catUse": 0, "catCode": "QDR3R2", "catName": "【部門活動】営業部", "order": 113, "active": 1, "count": 0}, {"code": "id_00014", "name": "設え/見学会準備/清掃", "catUse": 0, "catCode": "QDR3R2", "catName": "【部門活動】営業部", "order": 114, "active": 1, "count": 0}, {"code": "id_00015", "name": "案件ミーティング", "catUse": 0, "catCode": "QDR3R2", "catName": "【部門活動】営業部", "order": 115, "active": 1, "count": 0}, {"code": "id_00016", "name": "ロープレ", "catUse": 0, "catCode": "QDR3R2", "catName": "【部門活動】営業部", "order": 116, "active": 1, "count": 0}, {"code": "OZR28G", "name": "【顧客活動】設計課", "catUse": 1, "catCode": "", "catName": "", "order": 3, "active": 1, "count": 0}, {"code": "T7U8RH", "name": "プラン設計", "catUse": 0, "catCode": "OZR28G", "catName": "【顧客活動】設計課", "order": 10, "active": 0, "count": 0}, {"code": "619a7196", "name": "図面作成（P前）", "catUse": 0, "catCode": "OZR28G", "catName": "【顧客活動】設計課", "order": 140, "active": 1, "count": 0}, {"code": "f2435755", "name": "現調/役調（P前）", "catUse": 0, "catCode": "OZR28G", "catName": "【顧客活動】設計課", "order": 141, "active": 1, "count": 0}, {"code": "KOUMU", "name": "【部門活動】工務課", "catUse": 1, "catCode": "", "catName": "", "order": 4, "active": 1, "count": 0}, {"code": "b3da32e1_old", "name": "工務ミーティング", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "7b0a6489_old", "name": "請求書チェック", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "d5a0aca6_old", "name": "ANDPAD確認", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "adef96be_old", "name": "業者電話対応", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "fae3778b_old", "name": "全体案件進捗シート確認", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "bc4c1703_old", "name": "発注業務", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "e6ecae32_old", "name": "コンテナハウス業務", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "d9c2c873_old", "name": "庶務業務", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 0, "active": 1, "count": 0}, {"code": "8bcc747f_old", "name": "工程会議（準備含む）", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 142, "active": 1, "count": 0}, {"code": "63ef9e11_old", "name": "工務その他", "catUse": 0, "catCode": "KOUMU", "catName": "【部門活動】工務課", "order": 143, "active": 1, "count": 0}, {"code": "ORDX6N", "name": "【顧客活動】IC課", "catUse": 1, "catCode": "", "catName": "", "order": 5, "active": 1, "count": 0}, {"code": "663c4160", "name": "小工事現場対応", "catUse": 0, "catCode": "ORDX6N", "catName": "【顧客活動】IC課", "order": 0, "active": 1, "count": 0}, {"code": "b80db18e", "name": "アフター現場対応", "catUse": 0, "catCode": "ORDX6N", "catName": "【顧客活動】IC課", "order": 0, "active": 1, "count": 0}, {"code": "64ODRD", "name": "コーデ打合せ", "catUse": 0, "catCode": "ORDX6N", "catName": "【顧客活動】IC課", "order": 10, "active": 0, "count": 0}, {"code": "e367f06b", "name": "アフター会議（準備含む）", "catUse": 0, "catCode": "ORDX6N", "catName": "【顧客活動】IC課", "order": 144, "active": 1, "count": 0}, {"code": "aca69d8a", "name": "アフターその他", "catUse": 0, "catCode": "ORDX6N", "catName": "【顧客活動】IC課", "order": 145, "active": 1, "count": 0}, {"code": "MARK001", "name": "【部門活動】マーケ課", "catUse": 1, "catCode": "", "catName": "", "order": 6, "active": 1, "count": 0}, {"code": "4a3a7b2c", "name": "集計作業", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 0, "active": 1, "count": 0}, {"code": "837fff60", "name": "リサーチ", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 0, "active": 1, "count": 0}, {"code": "task004", "name": "制作物確認/作成", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 122, "active": 1, "count": 0}, {"code": "task003", "name": "予算管理", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 123, "active": 1, "count": 0}, {"code": "task002", "name": "イベント企画", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 124, "active": 1, "count": 0}, {"code": "task001", "name": "レポート作成/分析", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 125, "active": 1, "count": 0}, {"code": "id_00018", "name": "打合せ（社内/業者）", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 126, "active": 1, "count": 0}, {"code": "id_00022", "name": "現場活動", "catUse": 0, "catCode": "MARK001", "catName": "【部門活動】マーケ課", "order": 127, "active": 1, "count": 0}, {"code": "KEIRI", "name": "【部門活動】経理課", "catUse": 1, "catCode": "", "catName": "", "order": 7, "active": 1, "count": 0}, {"code": "f24bad7d", "name": "資金繰り業務", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 0, "active": 1, "count": 0}, {"code": "a019c642", "name": "金融機関等対応", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 0, "active": 1, "count": 0}, {"code": "0f0244c2", "name": "予算策定", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 0, "active": 1, "count": 0}, {"code": "8f7762de", "name": "予実管理", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 0, "active": 1, "count": 0}, {"code": "b201c042", "name": "財務業務", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 0, "active": 1, "count": 0}, {"code": "ec78ffe5", "name": "予算策定", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 0, "active": 1, "count": 0}, {"code": "d2d6de84", "name": "予実管理", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 0, "active": 1, "count": 0}, {"code": "ISHCW9", "name": "経理業務", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 131, "active": 1, "count": 0}, {"code": "id_00023", "name": "入金業務", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 132, "active": 1, "count": 0}, {"code": "id_00024", "name": "支払業務", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 133, "active": 1, "count": 0}, {"code": "id_00025", "name": "最終清算業務", "catUse": 0, "catCode": "KEIRI", "catName": "【部門活動】経理課", "order": 134, "active": 1, "count": 0}, {"code": "JINJI", "name": "【部門活動】人事課", "catUse": 1, "catCode": "", "catName": "", "order": 8, "active": 1, "count": 0}, {"code": "49353311", "name": "面接・面談・説明会", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 0, "active": 1, "count": 0}, {"code": "b37bc2d2", "name": "母集団形成業務（スカウト・電話・メール）", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 0, "active": 1, "count": 0}, {"code": "454067a2", "name": "母集団形成業務（登録・YouTube・SNS・販促）", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 0, "active": 1, "count": 0}, {"code": "26f8b054", "name": "部署関連打合せ（採用・教育・評価）", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 0, "active": 1, "count": 0}, {"code": "a83e0f98", "name": "その他事務作業", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 0, "active": 1, "count": 0}, {"code": "ca6247c7", "name": "面談/面接まとめ", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 0, "active": 1, "count": 0}, {"code": "id_00027", "name": "採用活動業務", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 128, "active": 0, "count": 0}, {"code": "id_00028", "name": "教育活動業務", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 129, "active": 0, "count": 0}, {"code": "id_00032", "name": "社内面談", "catUse": 0, "catCode": "JINJI", "catName": "【部門活動】人事課", "order": 130, "active": 0, "count": 0}, {"code": "SOMU", "name": "【部門活動】総務課", "catUse": 1, "catCode": "", "catName": "", "order": 9, "active": 1, "count": 0}, {"code": "32e6fff1", "name": "経理業務", "catUse": 0, "catCode": "SOMU", "catName": "【部門活動】総務課", "order": 0, "active": 1, "count": 0}, {"code": "id_00033", "name": "庶務業務", "catUse": 0, "catCode": "SOMU", "catName": "【部門活動】総務課", "order": 135, "active": 1, "count": 0}, {"code": "id_00034", "name": "入退社処理業務", "catUse": 0, "catCode": "SOMU", "catName": "【部門活動】総務課", "order": 136, "active": 1, "count": 0}, {"code": "id_00035", "name": "給与集計/計算業務", "catUse": 0, "catCode": "SOMU", "catName": "【部門活動】総務課", "order": 137, "active": 1, "count": 0}, {"code": "id_00036", "name": "契約書作成/締結業務", "catUse": 0, "catCode": "SOMU", "catName": "【部門活動】総務課", "order": 138, "active": 1, "count": 0}, {"code": "id_00037", "name": "総務業務", "catUse": 0, "catCode": "SOMU", "catName": "【部門活動】総務課", "order": 139, "active": 1, "count": 0}, {"code": "979YMC", "name": "給与計算", "catUse": 0, "catCode": "", "catName": "", "order": 10, "active": 0, "count": 0}, {"code": "GXRDO1", "name": "庶務作業", "catUse": 0, "catCode": "", "catName": "", "order": 10, "active": 0, "count": 0}, {"code": "KOUJI", "name": "【部門活動】工事部", "catUse": 1, "catCode": "", "catName": "", "order": 10, "active": 1, "count": 0}, {"code": "a7ce1415", "name": "現場作業（基礎）", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "5350b6bb", "name": "現場作業（基礎）", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "a4c47e80", "name": "事務所内業（見積関係）", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "fb678472", "name": "各種申請書類作成", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "f31e860d", "name": "アフター帳票整理", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "387a6027", "name": "中間・完成検査", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "61f7a84e", "name": "外構図作成", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "bc71c32d", "name": "材料加工", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 0, "active": 1, "count": 0}, {"code": "4979833f", "name": "車両整備/社内整備", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 146, "active": 1, "count": 0}, {"code": "cb1fd1fd", "name": "現場作業", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 147, "active": 1, "count": 0}, {"code": "50c9256e", "name": "社内作業", "catUse": 0, "catCode": "KOUJI", "catName": "【部門活動】工事部", "order": 148, "active": 1, "count": 0}, {"code": "HSO82I", "name": "【顧客活動】顧客満足向上", "catUse": 1, "catCode": "", "catName": "", "order": 11, "active": 1, "count": 0}, {"code": "15DWJC", "name": "地鎮祭上棟式引渡式", "catUse": 0, "catCode": "HSO82I", "catName": "【顧客活動】顧客満足向上", "order": 10, "active": 0, "count": 0}, {"code": "id_00038", "name": "顧客対面業務", "catUse": 0, "catCode": "HSO82I", "catName": "【顧客活動】顧客満足向上", "order": 117, "active": 1, "count": 0}, {"code": "id_00039", "name": "顧客非対面業務", "catUse": 0, "catCode": "HSO82I", "catName": "【顧客活動】顧客満足向上", "order": 118, "active": 1, "count": 0}, {"code": "SUPPORT", "name": "【部門活動】営業サポート課", "catUse": 1, "catCode": "", "catName": "", "order": 12, "active": 1, "count": 0}, {"code": "id_00040", "name": "引渡し準備業務", "catUse": 0, "catCode": "SUPPORT", "catName": "【部門活動】営業サポート課", "order": 119, "active": 1, "count": 0}, {"code": "id_00041", "name": "申込み後の顧客業務", "catUse": 0, "catCode": "SUPPORT", "catName": "【部門活動】営業サポート課", "order": 120, "active": 1, "count": 0}, {"code": "id_00042", "name": "店舗業務", "catUse": 0, "catCode": "SUPPORT", "catName": "【部門活動】営業サポート課", "order": 121, "active": 1, "count": 0}, {"code": "SYSTEM", "name": "【部門活動】情報システム課", "catUse": 1, "catCode": "", "catName": "", "order": 13, "active": 1, "count": 0}, {"code": "eff40491", "name": "システム開発", "catUse": 0, "catCode": "SYSTEM", "catName": "【部門活動】情報システム課", "order": 0, "active": 1, "count": 0}, {"code": "671c11d8", "name": "システムメンテナンス", "catUse": 0, "catCode": "SYSTEM", "catName": "【部門活動】情報システム課", "order": 0, "active": 1, "count": 0}, {"code": "IEDUKURI", "name": "【顧客家づくり活動】全工程", "catUse": 1, "catCode": "", "catName": "", "order": 14, "active": 1, "count": 0}, {"code": "205e6e35", "name": "四者会議", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 0, "active": 0, "count": 0}, {"code": "a0ccd579", "name": "営業業務", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 149, "active": 1, "count": 0}, {"code": "f4b91acf", "name": "設計業務", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 150, "active": 1, "count": 0}, {"code": "9f680d5b", "name": "CX業務（単独活動）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 151, "active": 1, "count": 0}, {"code": "3be22e77", "name": "CX業務（顧客対応）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 152, "active": 1, "count": 0}, {"code": "0ee851ca", "name": "CX業務（社外対応）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "ab1a7ebd", "name": "工務｜実行予算(図面把握・予算登録)", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "280224c2", "name": "工務｜工程表作成(業者調整含む)", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "124b5189", "name": "工務｜仮設計画(計画・現場環境手配)", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "5de3c175", "name": "工務｜現場訪問(移動含み)", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "4b99f1a5", "name": "工務｜リペア関連", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "b41e942d", "name": "工務｜現場イレギュラー対応", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "e524ec93", "name": "工務｜アフター関連", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 153, "active": 1, "count": 0}, {"code": "48e738ce", "name": "工務業務（社内活動）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 154, "active": 1, "count": 0}, {"code": "c4c01e56", "name": "工務業務（社内打合せ）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 155, "active": 1, "count": 0}, {"code": "436d3a45", "name": "工務業務（現場活動）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 156, "active": 1, "count": 0}, {"code": "f44d5683", "name": "工務業務（お客様対応）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 156, "active": 0, "count": 0}, {"code": "134c63f8", "name": "工務業務（現場打合せ）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 157, "active": 1, "count": 0}, {"code": "480c80c1", "name": "IC業務(準備)", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 158, "active": 1, "count": 0}, {"code": "bdac9f71", "name": "IC業務(顧客打合せ)", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 159, "active": 1, "count": 0}, {"code": "88784a83", "name": "IC業務（打合せ）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 159, "active": 1, "count": 0}, {"code": "e39986cc", "name": "IC業務（作図）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 159, "active": 1, "count": 0}, {"code": "1a4b1b78", "name": "CS活動（おもてなし）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 160, "active": 1, "count": 0}, {"code": "dada9247", "name": "顧客関連ミーティング（４者/3者会議）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 161, "active": 1, "count": 0}, {"code": "88ce8164", "name": "その他", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 162, "active": 1, "count": 0}, {"code": "１００", "name": "顧客訪問", "catUse": 0, "catCode": "", "catName": "", "order": 99, "active": 0, "count": 0}, {"code": "１１１", "name": "障害対応", "catUse": 0, "catCode": "", "catName": "", "order": 99, "active": 0, "count": 0}];
+
+// 工程グループCSV用グループコード（元データ準拠）
 const GRP_CODES = {
-  '社長室':'bb9985c5','役員活動':'YAKUIN_GRP','会社共通活動':'ALL_STAFF_TASK',
-  '営業部':'EIGYO_GRP','設計課':'V96UAY','工務課':'KOMU_TASK',
-  'IC課':'IC_GRP','マーケ課':'MARKETING_TASK','経理課':'KEIRI_TASK',
+  '社長室':'bb9985c5','役員活動':'aaaa','会社共通活動':'ALL_STAFF_TASK',
+  '営業部':'QDR3R2','設計課':'V96UAY','工務課':'KOMU_TASK',
+  'IC課':'ORDX6N','マーケ課':'MARKETING_TASK','経理課':'KEIRI_TASK',
   '人事課':'SAIYO_TASK','総務課':'SOMU_TASK','工事部':'KOJI_TASK',
   '顧客満足向上':'CX_TASK','営業サポート課':'SUPPORT_TASK',
   '情報システム課':'daa140f0','おうちづくり工程':'Q58WXJ',
 };
 
-function exportData() {
+// おうちづくり工程のカテゴリ定義（部署別分類）
+const IE_CATS = [
+  {cat:'営業',  catCode:'JUSDS2',   catName:'営業',  codes:['d38337d3','KQYX9O','id_00012','id_00015','a0ccd579']},
+  {cat:'工務',  catCode:'FWGEIR',   catName:'工務課', codes:['KM_01','KM_02','KM_03','KM_04','KM_05','KM_06','KM_07','KM_08','KM_09','KM_10','KM_11','KM_12']},
+  {cat:'CX課',  catCode:'LEN2PZ',   catName:'CX課',  codes:['CX_01','CX_02','CX_03','CX_04','CX_05','CX_06','CX_07','CX_08','CX_09','CX_10','CX_11','CX_12','CX_13','CX_14']},
+  {cat:'設計課', catCode:'SEKKEI_WK', catName:'設計課', codes:['f4b91acf','619a7196','f2435755']},
+  {cat:'IC課',  catCode:'IC_WK',    catName:'IC課',  codes:['IC_01','IC_02','IC_03','IC_04','IC_05','IC_06','IC_07','IC_08','IC_09','IC_10','IC_11','IC_12','IC_13','IC_14']},
+];
+
+function getIECat(code) {
+  for (const c of IE_CATS) if (c.codes.includes(code)) return c;
+  return null;
+}
+
+function exportMaster() {
   const today = new Date().toISOString().slice(0,10);
+  const header = ['管理コード','工程名','カテゴリとして使用','カテゴリ管理コード','カテゴリ名','表示順','アクティブ','件数取得'];
+  const rows = [header];
 
-  /* ===== 工程マスタ CSV =====
-     管理コード, 工程名, カテゴリとして使用, カテゴリ管理コード, カテゴリ名, 表示順, アクティブ, 件数取得 */
-  const mRows = [['管理コード','工程名','カテゴリとして使用','カテゴリ管理コード','カテゴリ名','表示順','アクティブ','件数取得']];
-  let mo = 1;
-
-  BASE_DEPTS.forEach(dept => {
-    const grpCode = GRP_CODES[dept.name] || ('GRP_' + dept.name);
-    if (dept.twoLayer) {
-      mRows.push([grpCode, dept.name, 1, '', '', mo++, 1, 0]);
-      dept.categories.forEach(catObj => {
-        const catCode = 'IECAT_' + catObj.cat;
-        mRows.push([catCode, catObj.cat, 1, grpCode, dept.name, mo++, 1, 0]);
-        catObj.items.forEach(item => mRows.push(['', item, 0, catCode, catObj.cat, mo++, 1, 0]));
-      });
-      state.approved.filter(a => a.dept === dept.name).forEach(a => {
-        const catCode = a.deptCat ? 'IECAT_' + a.deptCat : 'IECAT_全工程共通';
-        mRows.push(['', a.name, 0, catCode, a.deptCat || '全工程共通', mo++, 1, 0]);
-      });
-    } else {
-      const dashCode = 'DASH_' + dept.name;
-      mRows.push([grpCode, dept.name, 1, '', '', mo++, 1, 0]);
-      mRows.push([dashCode, '-', 1, grpCode, dept.name, mo++, 1, 0]);
-      dept.items.forEach(item => mRows.push(['', item, 0, dashCode, '-', mo++, 1, 0]));
-      state.approved.filter(a => a.dept === dept.name).forEach(a =>
-        mRows.push(['', a.name, 0, dashCode, '-', mo++, 1, 0])
-      );
-    }
+  // 元データ162行をそのまま出力（1行も変えない）
+  // カテゴリとして使用=1 の行はカテゴリ管理コード・カテゴリ名を空に
+  ORIGINAL_MASTER.forEach(r => {
+    if (state.deleted && state.deleted[r.code]) return;
+    const editedName = (state.edits && state.edits[r.code]) || r.name;
+    const catCode = r.catUse === 1 ? '' : r.catCode;
+    const catName = r.catUse === 1 ? '' : r.catName;
+    rows.push([r.code, editedName, r.catUse, catCode, catName, r.order, r.active, r.count]);
   });
 
-  dlCSV(mRows.map(r => r.map(csvEsc).join(',')).join('\n'), '工程マスタ_' + today + '.csv');
+  // SEKKEI_WK・IC_WK: 工程グループCSVの工程1コードとして使うため
+  // 非カテゴリ行（カテゴリとして使用=0）として追加
+  // ※ 工程マスタをインポート後、工程グループをインポートすること
+  const newCatRows = [
+    {code:'SEKKEI_WK', name:'設計課'},
+    {code:'IC_WK',     name:'IC課'},
+  ];
+  newCatRows.forEach(r => {
+    rows.push([r.code, r.name, 0, '', '', 999, 1, 0]);
+  });
 
-  /* ===== 工程グループ CSV =====
-     管理コード, 工程グループ名, 表示順, 工程1コード, 工程1名, 工程2コード, 工程2名, 工程3コード, 工程3名
-     おうちづくり工程 → 工程1=部署, 工程2=業務
-     その他          → 工程1="-",  工程2=業務                                              */
-  const gRows = [['管理コード','工程グループ名','表示順','工程1コード','工程1名','工程2コード','工程2名','工程3コード','工程3名']];
+  // 承認済み追加分を末尾に追記
+  state.approved.forEach(a => {
+    const parentDept = BASE_DEPTS.find(d => d.name === a.dept);
+    let catCode = '', catName = '';
+    if (parentDept) {
+      // おうちづくり工程の場合はカテゴリコードを設定
+      if (a.dept === 'おうちづくり工程' && a.deptCat) {
+        const cat = IE_CATS.find(c => c.cat === a.deptCat);
+        catCode = cat ? cat.catCode : '7PCAOY';
+        catName = a.deptCat;
+      } else {
+        // 通常部署: 親グループコード・グループ名をカテゴリとして設定
+        const orig = ORIGINAL_MASTER.find(r => r.catUse === 1 && r.name.includes(parentDept.name.replace(/【部門活動】|【顧客活動】|【会社活動】/,'')));
+        if (orig) { catCode = orig.code; catName = orig.name; }
+      }
+    }
+    rows.push(['', a.name, 0, catCode, catName, 999, 1, 0]);
+  });
+
+  dlCSV(rows.map(r => r.map(csvEsc).join(',')).join('\n'), '工程マスタ_' + today + '.csv');
+  showToast('工程マスタ CSV をダウンロードしました（' + rows.length + '行）');
+}
+
+function exportGroup() {
+  const today = new Date().toISOString().slice(0,10);
+  const header = ['管理コード','工程グループ名','表示順','工程1コード','工程1名','工程2コード','工程2名','工程3コード','工程3名'];
+  const rows = [header];
+
+  // 工程グループ名: 元の工程グループCSVの工程グループ名をそのまま使用
+  const GRP_NAMES = {
+    '社長室':'社長室','役員活動':'役員活動','会社共通活動':'全社員共通行動',
+    '営業部':'営業部','設計課':'設計課','工務課':'工務課','IC課':'アフター課',
+    'マーケ課':'マーケ課','経理課':'経理課','人事課':'採用教育課','総務課':'総務課',
+    '工事部':'工事部','顧客満足向上':'CX課','営業サポート課':'営業サポート',
+    '情報システム課':'情報システム課','おうちづくり工程':'おうちづくり工程',
+  };
 
   BASE_DEPTS.forEach(dept => {
-    const grpCode = GRP_CODES[dept.name] || ('GRP_' + dept.name);
+    const grpCode = GRP_CODES[dept.name];
+    if (!grpCode) return;
+    const grpName = GRP_NAMES[dept.name] || dept.name;
+
     if (dept.twoLayer) {
-      dept.categories.forEach(catObj => {
-        const cat1Code = 'IECAT_' + catObj.cat;
-        catObj.items.forEach(item => {
-          gRows.push([grpCode, dept.name, 0, cat1Code, catObj.cat, '', item, '', '']);
+      // おうちづくり工程: 工程1=部署, 工程2=業務
+      IE_CATS.forEach(catObj => {
+        catObj.codes.forEach(itemCode => {
+          const orig = ORIGINAL_MASTER.find(r => r.code === itemCode);
+          if (!orig || orig.active !== 1) return;
+          if (state.deleted && state.deleted[itemCode]) return;
+          const editedName = (state.edits && state.edits[itemCode]) || orig.name;
+          rows.push([grpCode, grpName, 0, catObj.catCode, catObj.cat, itemCode, editedName, '', '']);
         });
       });
       state.approved.filter(a => a.dept === dept.name).forEach(a => {
-        const cat1Code = a.deptCat ? 'IECAT_' + a.deptCat : 'IECAT_全工程共通';
-        const cat1Name = a.deptCat || '全工程共通';
-        gRows.push([grpCode, dept.name, 0, cat1Code, cat1Name, '', a.name, '', '']);
+        const cat = a.deptCat ? IE_CATS.find(c=>c.cat===a.deptCat) : null;
+        rows.push([grpCode, grpName, 0, cat?cat.catCode:'7PCAOY', cat?cat.catName:'-', '', a.name, '', '']);
       });
     } else {
-      const dashCode = 'DASH_' + dept.name;
-      dept.items.forEach(item => {
-        gRows.push([grpCode, dept.name, 0, dashCode, '-', '', item, '', '']);
+      // その他: 工程1="-"コード, 工程2=業務
+      const dashCode = '7PCAOY';
+      const masterCode = {
+        '社長室':'dfa4a688','役員活動':'aaaa','会社共通活動':'NV9QH7',
+        '営業部':'QDR3R2','設計課':'OZR28G','工務課':'KOUMU','IC課':'ORDX6N',
+        'マーケ課':'MARK001','経理課':'KEIRI','人事課':'JINJI','総務課':'SOMU',
+        '工事部':'KOUJI','顧客満足向上':'HSO82I','営業サポート課':'SUPPORT',
+        '情報システム課':'SYSTEM',
+      }[dept.name];
+      ORIGINAL_MASTER.filter(r => r.catCode === masterCode && r.catUse === 0 && r.active === 1 && !(state.deleted && state.deleted[r.code])).forEach(r => {
+        const editedName = (state.edits && state.edits[r.code]) || r.name;
+        rows.push([grpCode, grpName, 0, dashCode, '-', r.code, editedName, '', '']);
       });
       state.approved.filter(a => a.dept === dept.name).forEach(a => {
-        gRows.push([grpCode, dept.name, 0, dashCode, '-', '', a.name, '', '']);
+        rows.push([grpCode, grpName, 0, dashCode, '-', '', a.name, '', '']);
       });
     }
   });
 
-  setTimeout(() => {
-    dlCSV(gRows.map(r => r.map(csvEsc).join(',')).join('\n'), '工程グループ_' + today + '.csv');
-    showToast('工程マスタ ＋ 工程グループ CSV をダウンロードしました');
-  }, 800);
+  dlCSV(rows.map(r => r.map(csvEsc).join(',')).join('\n'), '工程グループ_' + today + '.csv');
+  showToast('工程グループ CSV をダウンロードしました（' + rows.length + '行）');
 }
+
+// 工程名インライン編集（承認者モードのみ・ダブルクリック）
+function startEdit(code, currentName) {
+  if (role !== 'manager') return;
+  const el = document.getElementById('chip-' + code);
+  if (!el) return;
+  const nameSpan = el.querySelector('.chip-name');
+  const orig = nameSpan.textContent;
+  const safeOrig = orig.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  nameSpan.innerHTML = '<input type="text" style="font-size:12px;border:none;background:transparent;border-bottom:1px solid #818cf8;outline:none;color:var(--color-text-primary);width:100%;font-family:inherit" value="' + orig.replace(/"/g,'&quot;') + '" onblur="commitEdit(\'' + code + '\',this,\'' + safeOrig + '\')" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){this.value=\'' + safeOrig + '\';this.blur()}" />';
+  nameSpan.querySelector('input').focus();
+  nameSpan.querySelector('input').select();
+}
+
+function commitEdit(code, input, orig) {
+  const newName = input.value.trim();
+  if (!state.edits) state.edits = {};
+  if (newName && newName !== orig) {
+    state.edits[code] = newName;
+  } else {
+    delete state.edits[code];
+  }
+  saveState();
+  renderAll();
+}
+
+function deleteItem(code, name) {
+  if (!confirm('「' + name + '」を削除しますか？\nCSVエクスポートからも除外されます。')) return;
+  if (!state.deleted) state.deleted = {};
+  state.deleted[code] = true;
+  saveState();
+  showToast('「' + name + '」を削除しました');
+  renderAll();
+}
+
+function restoreItem(code) {
+  if (!state.deleted) return;
+  delete state.deleted[code];
+  saveState();
+  renderAll();
+}
+
+function deleteApproved(id, name) {
+  if (!confirm('承認済み「' + name + '」を削除しますか？')) return;
+  state.approved = state.approved.filter(a => a.id !== id);
+  saveState();
+  showToast('「' + name + '」を削除しました');
+  renderAll();
+}
+
 
 function renderStats() {
   const base = BASE_DEPTS.reduce((s,d)=>s+d.items.length,0);
@@ -591,9 +817,11 @@ function renderList() {
 
   document.getElementById('viewList').innerHTML = depts.map(dept => {
     const key = dept.name.replace(/[^\w\u3040-\u30FF\u4E00-\u9FFF]/g, '_');
-    const isOpen = !!state.openCards[key];
     const dPend = state.pending.filter(p => p.dept === dept.name);
     const dAppr = state.approved.filter(a => a.dept === dept.name);
+    // 承認待ち・承認済みがある場合は自動で開く
+    if (dPend.length > 0 || dAppr.length > 0) state.openCards[key] = true;
+    const isOpen = !!state.openCards[key];
     const total = dept.items.length + dAppr.length;
     return `
     <div class="dept-card${isOpen?' open':''}" id="dc-${key}">
@@ -606,67 +834,89 @@ function renderList() {
         <span class="caret">&#9656;</span>
       </div>
       <div class="dept-body" style="display:${isOpen?'block':'none'}">
-        ${dept.twoLayer ? `
-          ${dept.categories.map(catObj => `
-            <div class="sub-section" style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">
-              <div class="sub-label" style="color:#60a5fa;margin-bottom:6px">
-                <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#0d1f3c;color:#60a5fa;border:0.5px solid #1e3a5f;font-weight:700">${catObj.cat}</span>
-              </div>
-              <div class="items-grid">
-                ${catObj.items.map(n=>`
-                  <div class="item-chip">
-                    <span class="item-dot" style="background:${dept.color}"></span>
-                    <span>${n}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          `).join('')}
-        ` : `
-        <div class="items-grid">
-          ${dept.items.map(n=>`
-            <div class="item-chip">
-              <span class="item-dot" style="background:${dept.color}"></span>
-              <span>${n}</span>
-            </div>
-          `).join('')}
-        </div>
-        `}
-        ${dAppr.length>0?`
-          <div class="sub-section">
-            <div class="sub-label" style="color:#60a5fa">&#10003; 承認済み追加項目</div>
-            <div class="items-grid">
-              ${dAppr.map(item=>`
-                <div class="item-chip is-new">
-                  <span class="item-dot" style="background:${dept.color}"></span>
-                  <span>${item.name}</span>
-                  <div class="item-meta">
-                    <span class="tag-new">NEW</span>
-                    <span class="tag-time">${item.addedAt}</span>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>`:''}
-        ${dPend.length>0?`
-          <div class="sub-section">
-            <div class="sub-label" style="color:#fbbf24">&#9679; 承認待ち</div>
-            <div class="items-grid">
-              ${dPend.map(item=>`
-                <div class="item-chip is-pend">
-                  <span class="item-dot" style="background:#d97706"></span>
-                  <span>${item.name}</span>
-                  <div class="item-meta">
-                    <span class="tag-pend">申請中</span>
-                    ${role==='manager'?`
-                      <button class="act-btn act-approve" onclick="approveItem(${item.id})">&#10003; 承認</button>
-                      <button class="act-btn act-reject" onclick="rejectItem(${item.id})">&#215;</button>
-                    `:''}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>`:''}
+        ${(()=>{
+          const grpCodeMap = {'社長室':'dfa4a688','役員活動':'aaaa','会社共通活動':'NV9QH7','営業部':'QDR3R2','設計課':'OZR28G','工務課':'KOUMU','IC課':'ORDX6N','マーケ課':'MARK001','経理課':'KEIRI','人事課':'JINJI','総務課':'SOMU','工事部':'KOUJI','顧客満足向上':'HSO82I','営業サポート課':'SUPPORT','情報システム課':'SYSTEM'};
+          function chipHtml(item,color){
+            const dn=(state.edits&&state.edits[item.code])||item.name;
+            const ed=!!(state.edits&&state.edits[item.code]);
+            const inactive=item.active===0;
+            if(state.deleted&&state.deleted[item.code]) return "";
+            const cls="item-chip"+(ed?" edited-chip":"")+(inactive?" is-inactive":"");
+            const dot='<span class="item-dot" style="background:'+(inactive?"#4a5068":color)+'"></span>';
+            const nameSpan='<span class="chip-name">'+dn+'</span>';
+            const codeSpan='<span class="chip-code">'+item.code+'</span>';
+            const inactiveTag=inactive?'<span class="inactive-tag">非表示</span>':'';
+            const editedTag=ed?'<span class="edited-mark">編</span>':'';
+            const delBtn=role==="manager"
+              ? '<button class="chip-del manager-only" data-code="'+item.code+'" data-name="'+item.name.replace(/"/g,"&quot;")+'" onclick="deleteItem(this.dataset.code,this.dataset.name)" title="削除">✕</button>'
+              : "";
+            return '<div class="'+cls+'" id="chip-'+item.code+'" data-code="'+item.code+'" data-name="'+item.name.replace(/"/g,"&quot;")+'" ondblclick="startEdit(this.dataset.code,this.dataset.name)">'
+              +dot+nameSpan+codeSpan+inactiveTag+editedTag+delBtn+"</div>";
+          }
+          if (dept.twoLayer) {
+            // おうちづくり工程: 各カテゴリセクション内に承認済み・承認待ちを統合
+            return IE_CATS.map(catObj => {
+              const catItems = catObj.codes.map(code => ORIGINAL_MASTER.find(r => r.code === code)).filter(Boolean);
+              const catAppr = dAppr.filter(a => a.deptCat === catObj.cat);
+              const catPend = dPend.filter(p => p.deptCat === catObj.cat);
+              if (!catItems.length && !catAppr.length && !catPend.length) return '';
+              let html = '<div class="sub-section" style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">'
+                + '<div class="sub-label" style="color:#60a5fa;margin-bottom:6px"><span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#0d1f3c;color:#60a5fa;border:0.5px solid #1e3a5f;font-weight:700">' + catObj.cat + '</span><span style="font-size:10px;color:#4a5068;font-family:monospace;margin-left:6px">' + catObj.catCode + '</span></div>';
+              // 承認待ち（最上部）
+              if (catPend.length) {
+                html += '<div class="items-grid" style="margin-bottom:6px">'
+                  + catPend.map(item =>
+                    '<div class="item-chip is-pend"><span class="item-dot" style="background:#d97706"></span><span>' + item.name + '</span>'
+                    + '<div class="item-meta"><span class="tag-pend">申請中</span><span class="tag-time">' + item.author + ' ' + item.addedAt + '</span>'
+                    + (role==='manager' ? '<button class="act-btn act-approve" onclick="approveItem(' + item.id + ')">✓ 承認</button><button class="act-btn act-reject" onclick="rejectItem(' + item.id + ')">×</button>' : '')
+                    + '</div></div>'
+                  ).join('') + '</div>';
+              }
+              // 既存項目
+              html += '<div class="items-grid">' + catItems.map(item => chipHtml(item, dept.color)).join('') + '</div>';
+              // 承認済み追加
+              if (catAppr.length) {
+                html += '<div class="items-grid" style="margin-top:6px">'
+                  + catAppr.map(item =>
+                    '<div class="item-chip is-new"><span class="item-dot" style="background:' + dept.color + '"></span><span>' + item.name + '</span>'
+                    + '<div class="item-meta"><span class="tag-new">NEW</span><span class="tag-time">' + item.author + ' ' + item.addedAt + '</span>'
+                    + (role==='manager' ? '<button class="chip-del" data-id="' + item.id + '" data-name="' + item.name.replace(/"/g,'&quot;') + '" onclick="deleteApproved(+this.dataset.id,this.dataset.name)" title="削除">✕</button>' : '')
+                    + '</div></div>'
+                  ).join('') + '</div>';
+              }
+              html += '</div>';
+              return html;
+            }).join('');
+          }
+          // 通常部署
+          const parentCode = grpCodeMap[dept.name];
+          const deptItems = parentCode ? ORIGINAL_MASTER.filter(r => r.catCode === parentCode && r.catUse === 0) : [];
+          let html = '';
+          // 承認待ち（最上部）
+          if (dPend.length) {
+            html += '<div class="items-grid" style="margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid var(--warn-border)">'
+              + dPend.map(item =>
+                '<div class="item-chip is-pend"><span class="item-dot" style="background:#d97706"></span><span>' + item.name + '</span>'
+                + '<div class="item-meta"><span class="tag-pend">申請中</span><span class="tag-time">' + item.author + ' ' + item.addedAt + '</span>'
+                + (role==='manager' ? '<button class="act-btn act-approve" onclick="approveItem(' + item.id + ')">✓ 承認</button><button class="act-btn act-reject" onclick="rejectItem(' + item.id + ')">×</button>' : '')
+                + '</div></div>'
+              ).join('') + '</div>';
+          }
+          // 既存項目
+          html += '<div class="items-grid">' + deptItems.map(item => chipHtml(item, dept.color)).join('') + '</div>';
+          // 承認済み追加
+          if (dAppr.length) {
+            html += '<div class="items-grid" style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--info-border)">'
+              + dAppr.map(item =>
+                '<div class="item-chip is-new"><span class="item-dot" style="background:' + dept.color + '"></span><span>' + item.name + '</span>'
+                + '<div class="item-meta"><span class="tag-new">NEW</span><span class="tag-time">' + item.author + ' ' + item.addedAt + '</span>'
+                + (role==='manager' ? '<button class="chip-del" data-id="' + item.id + '" data-name="' + item.name.replace(/"/g,'&quot;') + '" onclick="deleteApproved(+this.dataset.id,this.dataset.name)" title="削除">✕</button>' : '')
+                + '</div></div>'
+              ).join('') + '</div>';
+          }
+          return html;
+        })()}
+
       </div>
     </div>`;
   }).join('');
@@ -741,6 +991,25 @@ function renderAll() {
   renderList();
   renderPending();
   renderApproved();
+  renderDeleted();
+}
+
+function renderDeleted() {
+  const panel = document.getElementById('deleted-panel');
+  const list = document.getElementById('deleted-list');
+  if (!panel || !list) return;
+  const deletedCodes = Object.keys(state.deleted || {});
+  if (deletedCodes.length === 0 || role !== 'manager') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  list.innerHTML = deletedCodes.map(code => {
+    const orig = ORIGINAL_MASTER.find(r => r.code === code);
+    const name = (state.edits && state.edits[code]) || (orig ? orig.name : code);
+    const safeName = name.replace(/"/g, "&quot;");
+      + '<span>' + name + '</span>'
+      + '<span style="font-size:10px;color:#4a5068;font-family:monospace">' + code + '</span>'
+      + '<button data-code="' + code + '" onclick="restoreItem(this.dataset.code)" style="font-size:10px;padding:2px 7px;border-radius:3px;border:0.5px solid var(--success-border);color:var(--success);background:transparent;cursor:pointer;margin-left:4px">復元</button>'
+      + '<button data-code="' + code + '" onclick="restoreItem(this.dataset.code)" style="font-size:10px;padding:2px 7px;border-radius:3px;border:0.5px solid var(--success-border);color:var(--success);background:transparent;cursor:pointer;margin-left:4px">復元</button>'
+  }).join('');
 }
 
 
@@ -800,7 +1069,8 @@ function updateDots() {
 }
 
 // Init
-loadState();
+(async () => {
+  await loadState();
 const deptSel = document.getElementById('inp-dept');
 BASE_DEPTS.forEach(d => {
   if (d.twoLayer) {
@@ -819,6 +1089,20 @@ BASE_DEPTS.forEach(d => {
 });
 document.getElementById('nav-all').classList.add('active');
 renderAll();
+
+  // リアルタイム監視: 他のユーザーの変更を受信したら画面を更新
+  if (window.fbWatch) {
+    window.fbWatch((data) => {
+      state.pending  = data.pending  || [];
+      state.approved = data.approved || [];
+      state.edits    = data.edits    || {};
+      state.deleted  = data.deleted  || {};
+      DEFAULT_HIDDEN.forEach(code => { state.deleted[code] = true; });
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+      renderAll();
+    });
+  }
+})();
 </script>
 
 <div class="pw-overlay hidden" id="pw-modal">
