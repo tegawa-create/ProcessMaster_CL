@@ -778,11 +778,11 @@ function exportGroup() {
           if (state.deleted && state.deleted[itemCode]) return;
           if (hiddenSet2.has(itemCode)) return;
           const editedName = (state.edits && state.edits[itemCode]) || orig.name;
-          rows.push([grpCode, grpName, 0, 'IEDUKURI', '【顧客家づくり活動】全工程', itemCode, editedName, '', '']);
+          rows.push([grpCode, grpName, 0, '', '', itemCode, editedName, '', '']);
         });
       });
       state.approved.filter(a => a.dept === dept.name).forEach(a => {
-        rows.push([grpCode, grpName, 0, 'IEDUKURI', '【顧客家づくり活動】全工程', a.autoCode||'', a.name, '', '']);
+        rows.push([grpCode, grpName, 0, '', '', a.autoCode||'', a.name, '', '']);
       });
     } else {
       // その他: 工程1="-"コード, 工程2=業務
