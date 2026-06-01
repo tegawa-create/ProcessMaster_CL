@@ -726,7 +726,9 @@ function exportMaster() {
     rows.push([r.code, editedName, r.catUse, catCode, catName, r.order, r.active, r.count]);
   });
 
-  // SEKKEI_WK・IC_WKは不要のため削除済み
+  // SEKKEI_WK・IC_WK: 工程グループの工程1コードとして使用するため非カテゴリ行で追加
+  rows.push(['SEKKEI_WK', '設計課', 0, '', '', ord++, 1, 0]);
+  rows.push(['IC_WK',     'IC課',   0, '', '', ord++, 1, 0]);
 
   // 承認済み追加分を末尾に追記
   state.approved.forEach(a => {
@@ -768,21 +770,28 @@ function exportGroup() {
 
     if (dept.twoLayer) {
       // おうちづくり工程: 工程1=部署, 工程2=業務
-      const _seen = new Set();
+      // 部署→工程1コード・工程1名のマップ（全て非カテゴリ行）
+      const cat1Map = {
+        '営業':  {code:'JUSDS2',    name:'営業'},
+        '工務':  {code:'FWGEIR',    name:'工務課'},
+        'CX課':  {code:'LEN2PZ',    name:'CX課'},
+        '設計課': {code:'SEKKEI_WK', name:'設計課'},
+        'IC課':  {code:'IC_WK',     name:'IC課'},
+      };
       IE_CATS.forEach(catObj => {
+        const c1 = cat1Map[catObj.cat] || {code:'', name:''};
         catObj.codes.forEach(itemCode => {
-          if (_seen.has(itemCode)) return;
-          _seen.add(itemCode);
           const orig = ORIGINAL_MASTER.find(r => r.code === itemCode);
           if (!orig || orig.active !== 1) return;
           if (state.deleted && state.deleted[itemCode]) return;
           if (hiddenSet2.has(itemCode)) return;
           const editedName = (state.edits && state.edits[itemCode]) || orig.name;
-          rows.push([grpCode, grpName, 0, '', '', itemCode, editedName, '', '']);
+          rows.push([grpCode, grpName, 0, c1.code, c1.name, itemCode, editedName, '', '']);
         });
       });
       state.approved.filter(a => a.dept === dept.name).forEach(a => {
-        rows.push([grpCode, grpName, 0, '', '', a.autoCode||'', a.name, '', '']);
+        const c1 = cat1Map[a.deptCat] || {code:'', name:''};
+        rows.push([grpCode, grpName, 0, c1.code, c1.name, a.autoCode||'', a.name, '', '']);
       });
     } else {
       // その他: 工程1="-"コード, 工程2=業務
