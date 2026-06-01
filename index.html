@@ -716,34 +716,19 @@ function exportMaster() {
     rows.push([r.code, editedName, r.catUse, catCode, catName, r.order, r.active, r.count]);
   });
 
-  // SEKKEI_WK・IC_WK: 工程グループCSVの工程1コードとして使うため
-  // 非カテゴリ行（カテゴリとして使用=0）として追加
-  // ※ 工程マスタをインポート後、工程グループをインポートすること
-  const newCatRows = [
-    {code:'SEKKEI_WK', name:'設計課'},
-    {code:'IC_WK',     name:'IC課'},
-  ];
-  newCatRows.forEach(r => {
-    rows.push([r.code, r.name, 0, '', '', 999, 1, 0]);
-  });
+  // SEKKEI_WK・IC_WKは不要のため削除済み
 
   // 承認済み追加分を末尾に追記
   state.approved.forEach(a => {
-    const parentDept = BASE_DEPTS.find(d => d.name === a.dept);
     let catCode = '', catName = '';
-    if (parentDept) {
-      // おうちづくり工程の場合はカテゴリコードを設定
-      if (a.dept === 'おうちづくり工程' && a.deptCat) {
-        const cat = IE_CATS.find(c => c.cat === a.deptCat);
-        catCode = cat ? cat.catCode : '7PCAOY';
-        catName = a.deptCat;
-      } else {
-        // 通常部署: 親グループコード・グループ名をカテゴリとして設定
-        const orig = ORIGINAL_MASTER.find(r => r.catUse === 1 && r.name.includes(parentDept.name.replace(/【部門活動】|【顧客活動】|【会社活動】/,'')));
-        if (orig) { catCode = orig.code; catName = orig.name; }
-      }
+    if (a.dept === 'おうちづくり工程') {
+      catCode = 'IEDUKURI';
+      catName = '【顧客家づくり活動】全工程';
+    } else {
+      const orig = ORIGINAL_MASTER.find(r => r.catUse === 1 && r.name.includes((a.dept||'').replace(/【部門活動】|【顧客活動】|【会社活動】/,'')));
+      if (orig) { catCode = orig.code; catName = orig.name; }
     }
-    rows.push(['', a.name, 0, catCode, catName, 999, 1, 0]);
+    rows.push([a.autoCode||'', a.name, 0, catCode, catName, 999, 1, 0]);
   });
 
   dlCSV(rows.map(r => r.map(csvEsc).join(',')).join('\n'), '工程マスタ_' + today + '.csv');
