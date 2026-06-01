@@ -395,7 +395,7 @@ const BASE_DEPTS = [
 ];
 
 const STORAGE_KEY = 'kousu_master_v1'; // fallback only
-const DEFAULT_HIDDEN = ["6ee0310b_old", "b3da32e1_old", "IE_ETC_KM", "dfa4a688_old", "SR_CAT01_old", "SR_CAT06_old", "fae3778b_old", "SR_CAT09_old", "e6ecae32_old", "SR_CAT03_old", "SR_CAT08_old", "IE_MTG_IC", "7b0a6489_old", "SR_CAT07_old", "adef96be_old", "bc4c1703_old", "IE_MTG_CX", "IE_ETC_CX", "SR_CAT02_old", "SR_CAT05_old", "d5a0aca6_old", "IE_MTG_KM", "8bcc747f_old", "IE_ETC_IC", "d9c2c873_old", "63ef9e11_old", "SR_CAT04_old", "185b6e9d_old"];
+const DEFAULT_HIDDEN = ["6ee0310b_old", "b3da32e1_old", "IE_ETC_KM", "dfa4a688_old", "SR_CAT01_old", "SR_CAT06_old", "fae3778b_old", "SR_CAT09_old", "e6ecae32_old", "SR_CAT03_old", "SR_CAT08_old", "7b0a6489_old", "SR_CAT07_old", "adef96be_old", "bc4c1703_old", "IE_ETC_CX", "SR_CAT02_old", "SR_CAT05_old", "d5a0aca6_old", "8bcc747f_old", "IE_ETC_IC", "d9c2c873_old", "63ef9e11_old", "SR_CAT04_old", "185b6e9d_old"];
 let state = { pending: [], approved: [], openCards: {}, edits: {}, deleted: {} };
 let role = 'shacho';
 let currentView = 'list';
@@ -698,10 +698,10 @@ const GRP_CODES = {
 // おうちづくり工程のカテゴリ定義（部署別分類）
 const IE_CATS = [
   {cat:'営業',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['d38337d3','KQYX9O','id_00012','id_00015','a0ccd579','IE_MTG_EG','IE_ETC_EG']},
-  {cat:'工務',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['KM_01','KM_02','KM_03','KM_04','KM_05','KM_06','KM_07','KM_08','KM_09','KM_10','KM_11','KM_12']},
-  {cat:'CX課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['CX_01','CX_02','CX_03','CX_04','CX_05','CX_06','CX_07','CX_08','CX_09','CX_10','CX_11','CX_12','CX_13','CX_14']},
+  {cat:'工務',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['KM_01','KM_02','KM_03','KM_04','KM_05','KM_06','KM_07','KM_08','KM_09','KM_10','KM_11','KM_12','IE_MTG_KM','KM_12']},
+  {cat:'CX課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['CX_01','CX_02','CX_03','CX_04','CX_05','CX_06','CX_07','CX_08','CX_09','CX_10','CX_11','CX_12','CX_13','IE_MTG_CX','CX_14']},
   {cat:'設計課', catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['f4b91acf','619a7196','f2435755','IE_MTG_SK','IE_ETC_SK']},
-  {cat:'IC課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['IC_01','IC_02','IC_03','IC_04','IC_05','IC_06','IC_07','IC_08','IC_09','IC_10','IC_11','IC_12','IC_13','IC_14']},
+  {cat:'IC課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['IC_01','IC_02','IC_03','IC_04','IC_05','IC_06','IC_07','IC_08','IC_09','IC_10','IC_11','IC_12','IC_13','IE_MTG_IC','IC_14']},
 ];
 
 function getIECat(code) {
