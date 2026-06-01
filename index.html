@@ -593,6 +593,16 @@ function dlCSV(content, filename) {
 }
 
 const ORIGINAL_MASTER = [
+{"code": "IE_MTG_EG", "name": "顧客関連ミーティング（４者/3者会議）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 160, "active": 1, "count": 0},
+{"code": "IE_MTG_SK", "name": "顧客関連ミーティング（４者/3者会議）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 161, "active": 1, "count": 0},
+{"code": "IE_MTG_KM", "name": "顧客関連ミーティング（４者/3者会議）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 162, "active": 1, "count": 0},
+{"code": "IE_MTG_IC", "name": "顧客関連ミーティング（４者/3者会議）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 163, "active": 1, "count": 0},
+{"code": "IE_MTG_CX", "name": "顧客関連ミーティング（４者/3者会議）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 164, "active": 1, "count": 0},
+{"code": "IE_ETC_EG", "name": "その他", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 170, "active": 1, "count": 0},
+{"code": "IE_ETC_SK", "name": "その他", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 171, "active": 1, "count": 0},
+{"code": "IE_ETC_KM", "name": "その他", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 172, "active": 1, "count": 0},
+{"code": "IE_ETC_IC", "name": "その他", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 173, "active": 1, "count": 0},
+{"code": "IE_ETC_CX", "name": "その他", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 174, "active": 1, "count": 0},
 {"code": "dada9247", "name": "顧客関連ミーティング（４者/3者会議）", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 150, "active": 1, "count": 0},
 {"code": "88ce8164", "name": "その他", "catUse": 0, "catCode": "IEDUKURI", "catName": "【顧客家づくり活動】全工程", "order": 151, "active": 1, "count": 0},
 {"code": "SR_CAT01_old", "name": "①秘書・帯同業務", "catUse": 0, "catCode": "", "catName": "", "order": 299, "active": 1, "count": 0},
@@ -687,11 +697,11 @@ const GRP_CODES = {
 
 // おうちづくり工程のカテゴリ定義（部署別分類）
 const IE_CATS = [
-  {cat:'営業',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['d38337d3','KQYX9O','id_00012','id_00015','a0ccd579','dada9247','88ce8164']},
-  {cat:'工務',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['KM_01','KM_02','KM_03','KM_04','KM_05','KM_06','KM_07','KM_08','KM_09','KM_10','KM_11','KM_12','dada9247','88ce8164']},
-  {cat:'CX課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['CX_01','CX_02','CX_03','CX_04','CX_05','CX_06','CX_07','CX_08','CX_09','CX_10','CX_11','CX_12','CX_13','CX_14','dada9247','88ce8164']},
-  {cat:'設計課', catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['f4b91acf','619a7196','f2435755','dada9247','88ce8164']},
-  {cat:'IC課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['IC_01','IC_02','IC_03','IC_04','IC_05','IC_06','IC_07','IC_08','IC_09','IC_10','IC_11','IC_12','IC_13','IC_14','dada9247','88ce8164']},
+  {cat:'営業',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['d38337d3','KQYX9O','id_00012','id_00015','a0ccd579','IE_MTG_EG','IE_ETC_EG']},
+  {cat:'工務',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['KM_01','KM_02','KM_03','KM_04','KM_05','KM_06','KM_07','KM_08','KM_09','KM_10','KM_11','KM_12','IE_MTG_KM','IE_ETC_KM']},
+  {cat:'CX課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['CX_01','CX_02','CX_03','CX_04','CX_05','CX_06','CX_07','CX_08','CX_09','CX_10','CX_11','CX_12','CX_13','CX_14','IE_MTG_CX','IE_ETC_CX']},
+  {cat:'設計課', catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['f4b91acf','619a7196','f2435755','IE_MTG_SK','IE_ETC_SK']},
+  {cat:'IC課',  catCode:'IEDUKURI', catName:'【顧客家づくり活動】全工程', codes:['IC_01','IC_02','IC_03','IC_04','IC_05','IC_06','IC_07','IC_08','IC_09','IC_10','IC_11','IC_12','IC_13','IC_14','IE_MTG_IC','IE_ETC_IC']},
 ];
 
 function getIECat(code) {
